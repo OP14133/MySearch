@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <title>GPT 研究员</title>
+    <meta name="description" content="由GPT-4驱动的研究助手">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <link rel="icon" href="./static/favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/site/styles.css" />
+    <style>
+        .avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+        }
+
+        .agent-name {
+            text-align: center;
+        }
+
+        .agent-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .agent-choices {
+            display: none;
+        }
+
+        .btn-show {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <section class="landing">
+        <div class="max-w-5xl mx-auto text-center">
+            <h1 class="text-4xl font-extrabold mx-auto lg:text-7xl">
+                <br>
+                <span
+                    style="background-image:linear-gradient(to right, #9867F0, #ED4E50); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">中国传媒大学</span>
+            </h1>
+            <p class="max-w-6xl mx-auto text-gray-600 mt-8" style="font-size:20px">
+                欢迎使用 <b>舆情信息检索系统</b>，快速获取深入见解和全面研究。<br>
+<!--                GPT 研究员负责从准确收集来源和组织研究结果到生成带有引用的定制报告的一切工作。-->
+            </p>
+            <a href="#form" class="btn btn-primary">开始使用</a>
+        </div>
+    </section>
+
+    <main class="container" id="form">
+<!--        <div class="agent-item"><img src="/static/gptr-logo.png" class="avatar" alt="自动代理"></div>-->
+        <form method="POST" class="mt-3" onsubmit="GPTResearcher.startResearch(); return false;">
+            <div class="form-group">
+                <label for="task" class="agent-question">请输入您的问题：</label>
+                <input id="task" name="task" class="form-control" required></input>
+                <input type="radio" name="agent" id="autoAgent" value="自动代理" checked hidden>
+            </div>
+            <div class="form-group">
+                <div class="row">
+                </div>
+                <button type="button" id="btnShowAuto" class="btn btn-secondary mt-3 btn-show">自动代理</button>
+            </div>
+            <div class="form-group">
+                <label for="report_type" class="agent-question">您希望我生成哪种类型的报告？</label>
+                <select name="report_type" class="form-control" required>
+                    <option value="research_report">摘要 - 简短快速（~2 分钟）</option>
+                    <option value="detailed_report">详细 - 深入且较长（~5 分钟）</option>
+                    <option value="resource_report">资源报告</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="tone" class="agent-question">您希望报告以哪种语气生成？</label>
+                <select name="tone" id="tone" class="form-control" required>
+                    <option value="Objective">客观 - 公正且无偏见地呈现事实和发现</option>
+                    <option value="Formal">正式 - 遵循学术标准，使用复杂的语言和结构</option>
+                    <option value="Analytical">分析 - 批判性评估和详细检查数据和理论</option>
+                    <option value="Persuasive">说服 - 说服观众接受特定观点或论点</option>
+                    <option value="Informative">信息 - 提供关于主题的清晰和全面的信息</option>
+                    <option value="Explanatory">解释 - 澄清复杂的概念和过程</option>
+                    <option value="Descriptive">描述 - 详细描绘现象、实验或案例研究</option>
+                    <option value="Critical">批判 - 判断研究的效度和相关性及其结论</option>
+                    <option value="Comparative">比较 - 并列不同的理论、数据或方法以突出差异和相似之处</option>
+                    <option value="Speculative">推测 - 探索假设和潜在的含义或未来研究方向</option>
+                    <option value="Reflective">反思 - 考虑研究过程和个人见解或经验</option>
+                    <option value="Narrative">叙述 - 通过讲故事来阐释研究结果或方法</option>
+                    <option value="Humorous">幽默 - 轻松愉快且引人入胜，通常使内容更易理解</option>
+                    <option value="Optimistic">乐观 - 强调积极的发现和潜在的好处</option>
+                    <option value="Pessimistic">悲观 - 关注限制、挑战或负面结果</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="report_source" class="agent-question">您希望我从哪些来源进行研究？</label>
+<!--                <p class="text-left mt-0 pt-0" style="font-size: 0.7rem;">您现在也可以对本地文档进行研究。请确保添加指向文档文件夹的 DOC_PATH 环境变量。</p>-->
+                <select name="report_source" class="form-control" required>
+                    <option value="web">网络</option>
+                    <option value="local">我的文档</option>
+                    <option value="hybrid">混合</option>
+                </select>
+            </div>
+            <input type="submit" value="开始研究" class="btn btn-primary button-padding">
+        </form>
+
+        <div class="margin-div">
+            <h2>代理输出</h2>
+            <p class="mt-2 text-left" style="font-size: 0.8rem;">将生成一个专门针对您任务的代理，以提供最精确和相关的研究结果。</p>
+            <div id="output"></div>
+        </div>
+        <div class="images_div">
+            <div id="selectedImagesContainer" style="display: none;"></div>
+        </div>
+        <div class="margin-div">
+            <h2>研究报告</h2>
+            <div id="reportContainer"></div>
+            <div id="reportActions">
+                <div class="alert alert-info" role="alert" id="status"></div>
+                <a id="copyToClipboard" onclick="GPTResearcher.copyToClipboard()" class="btn btn-secondary mt-3"
+                    style="margin-right: 10px;">复制到剪贴板 (Markdown)</a>
+                <a id="downloadLinkMd" href="#" class="btn btn-secondary mt-3" style="margin-right: 10px;"
+                    target="_blank">下载为 Markdown</a>
+                <a id="downloadLink" href="#" class="btn btn-secondary mt-3" style="margin-right: 10px;"
+                    target="_blank">下载为 PDF</a>
+                <a id="downloadLinkWord" href="#" class="btn btn-secondary mt-3" target="_blank">下载为 Docx</a>
+            </div>
+        </div>
+    </main>
+
+<!--    <footer>-->
+<!--        <p>-->
+<!--            <a target="_blank" href="https://gptr.dev">首页</a> |-->
+<!--            <a target="_blank" href="https://github.com/assafelovic/gpt-researcher">GitHub</a> |-->
+<!--            <a target="_blank" href="https://discord.gg/spBgZmm3Xe">Discord</a>-->
+<!--        </p>-->
+<!--        <p>GPT 研究员 &copy; 2024</p>-->
+<!--    </footer>-->
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/1.9.1/showdown.min.js"></script>
+    <script src="/site/scripts.js"></script>
+    <script>
+        // const btnChoose = document.getElementById('btnChoose');
+        const btnShowAuto = document.getElementById('btnShowAuto');
+        const autoAgentDiv = document.getElementById('autoAgentDiv');
+        const agentChoices = document.getElementsByClassName('agent-choices');
+
+        /**
+        btnChoose.addEventListener('click', function () {
+            btnShowAuto.style.display = 'inline-block';
+            btnChoose.style.display = 'none';
+            autoAgentDiv.style.display = 'none';
+            agentChoices[0].style.display = 'flex';
+        });
+        **/
+
+        btnShowAuto.addEventListener('click', function () {
+            btnShowAuto.style.display = 'none';
+            btnChoose.style.display = 'inline-block';
+            autoAgentDiv.style.display = 'flex';
+            agentChoices[0].style.display = 'none';
+        });
+
+        const tagsInput = document.getElementById('tags-input');
+        const input = document.getElementById('custom_source');
+
+        if (input) {
+            input.addEventListener('keypress', function (e) {
+            if ((e.key === 'Enter' || e.key === ",") && input.value !== '') {
+                e.preventDefault();
+                GPTResearcher.addTag(input.value);
+                input.value = '';
+            }
+        });
+        }
+
+</script>
+</body>
+
+</html>
