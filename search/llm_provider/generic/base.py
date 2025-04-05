@@ -32,7 +32,7 @@ class GenericLLMProvider:
         return cls(llm)
 
 
-    async def get_chat_response(self, messages, stream, websocket=None):
+    async def get_chat_response(self, messages, stream, websocket=None, type=None):
         if not stream:
             # Getting output from the model chain using ainvoke for asynchronous invoking
             output = await self.llm.ainvoke(messages)
@@ -40,9 +40,9 @@ class GenericLLMProvider:
             return output.content
 
         else:
-            return await self.stream_response(messages, websocket)
+            return await self.stream_response(messages, websocket, type)
 
-    async def stream_response(self, messages, websocket=None):
+    async def stream_response(self, messages, websocket=None, type=None):
         paragraph = ""
         response = ""
 
@@ -53,17 +53,23 @@ class GenericLLMProvider:
                 response += content
                 paragraph += content
                 if "\n" in paragraph:
-                    await self._send_output(paragraph, websocket)
+                    if type is not None:
+                        await self._send_output(paragraph, websocket, type=type)
+                    else:
+                        await self._send_output(paragraph, websocket)
                     paragraph = ""
 
         if paragraph:
-            await self._send_output(paragraph, websocket)
+            if type is not None:
+                await self._send_output(paragraph, websocket, type=type)
+            else:
+                await self._send_output(paragraph, websocket)
 
         return response
 
-    async def _send_output(self, content, websocket=None):
+    async def _send_output(self, content, websocket=None, type="report"):
         if websocket is not None:
-            await websocket.send_json({"type": "report", "output": content})
+            await websocket.send_json({"type": type, "output": content})
         else:
             print(f"{Fore.GREEN}{content}{Style.RESET_ALL}")
 

@@ -4,15 +4,13 @@ import logging
 import time
 import sys
 import os
-
-
-
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from datetime import datetime, timedelta
 # from gpt_researcher.llm_provider.generic.base import ReasoningEfforts
-from mysearch.utils.llm import create_chat_completion
-from mysearch.utils.enum import ReportType, ReportSource, Tone
-from mysearch.actions.query_processing import get_search_results
+from search.utils.llm import create_chat_completion
+from search.utils.enum import ReportType, ReportSource, Tone
+from search.actions.query_processing import get_search_results
+from MySearch.search.actions import stream_output
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +216,10 @@ class DeepResearchSkill:
 
         # Generate mysearch queries
         serp_queries = await self.generate_search_queries(query, num_queries=breadth)
+        """
+        子问题 ，目前设置为了1
+        [{'query': '2022年俄乌冲突的背景、演变过程及关键转折点', 'researchGoal': '研究2022年俄乌冲突的起因、发展过程以及导致战争全面爆发的关键事件和时间节点。'}]
+        """
         progress.total_queries = len(serp_queries)
 
         all_learnings = learnings.copy()
@@ -265,7 +267,7 @@ class DeepResearchSkill:
                     visited = researcher.visited_urls
                     sources = researcher.research_sources
 
-                    # Process results to extract learnings and citations
+                    # 根据返回的结果判断是否有新的问题，扩展查询Process results to extract learnings and citations
                     results = await self.process_research_results(
                         query=serp_query['query'],
                         context=context
@@ -361,14 +363,25 @@ class DeepResearchSkill:
     async def run(self, on_progress=None) -> str:
         """Run the deep research process and generate final report"""
         start_time = time.time()
-
         # Log initial costs
         # initial_costs = self.researcher.get_costs()
-
         follow_up_questions = await self.generate_research_plan(self.researcher.query)
-
+        #follow_up_questions示例 字符串列表
+        """
+        ['2022年俄乌冲突的起因是什么，主要涉及哪些关键人物和组织，冲突爆发后经历了哪些重要的时间节点？', 
+        '截至2025年4月，俄乌战争的最新动态是什么？双方在最近的军事行动中取得了哪些进展或遭遇了哪些挫折？', 
+        '俄乌战争爆发以来，国际社会和民众对冲突的反应如何？社交媒体上关于俄乌战争的讨论趋势和情感倾向是怎样的？', 
+        '俄乌战争对乌克兰和俄罗斯的经济、政治、社会等方面产生了哪些具体影响？国际社会对两国采取了哪些应对措施？', 
+        '从2022年俄乌冲突爆发至今，俄乌战争的发展脉络是怎样的？冲突双方的力量对比发生了哪些变化，国际社会的立场和态度有何调整？']
+        """
+        #lgq这里有问题，没有发送到前端，self.websocket和self.researcher.websocket是同一个
+        await stream_output(
+            "plan",
+            "research_plan",
+            follow_up_questions,
+            self.researcher.websocket,
+        )
         answers = ["Automatically proceeding with research"] * len(follow_up_questions)
-
         qa_pairs = [f"Q: {q}\nA: {a}" for q, a in zip(follow_up_questions, answers)]
         combined_query = f"""
         Initial Query: {self.researcher.query}\nFollow - up Questions and Answers:\n
@@ -380,16 +393,6 @@ class DeepResearchSkill:
             depth=self.depth,
             on_progress=on_progress
         )
-
-        # Get costs after deep research
-        # research_costs = self.researcher.get_costs() - initial_costs
-
-        # Log research costs if we have a log handler
-        # if self.researcher.log_handler:
-        #     await self.researcher._log_event("research", step="deep_research_costs", details={
-        #         "total_costs": self.researcher.get_costs()
-        #     })
-
         # Prepare context with citations
         context_with_citations = []
         for learning in results['learnings']:

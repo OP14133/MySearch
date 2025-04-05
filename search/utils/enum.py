@@ -10,7 +10,13 @@ class ReportType(Enum):
     CustomReport = "custom_report" #自定义报告
     DetailedReport = "detailed_report" #详细报告
     SubtopicReport = "subtopic_report" #子主题报告
+    ChatReport = "chat_report"
+    DeepResearch = "deep"
 
+    SummeryReport = "summery_report" #事件概要报告
+    TimeLineReport = "timeline_report" #事件时间线报告
+    SocialMediaReport = "social_media_report" #社交媒体报告
+    InfluenceReport = "influence_report" #后续影响报告
 
 class ReportSource(Enum):
     Web = "web"

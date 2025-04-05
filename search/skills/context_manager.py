@@ -1,10 +1,7 @@
 import asyncio
 from typing import List, Dict, Optional, Set
-
 from ..context.compression import ContextCompressor, WrittenContentCompressor, VectorstoreCompressor
 from ..actions.utils import stream_output
-
-
 class ContextManager:
     """Manages context for the researcher agent."""
 
@@ -16,15 +13,17 @@ class ContextManager:
             await stream_output(
                 "logs",
                 "fetching_query_content",
-                f"📚 Getting relevant content based on query: {query}...",
+                f"正在获取“{query}”相关内容..。。.",
                 self.researcher.websocket,
             )
+        print("执行到了相似度匹配fetching_query_content1")
         #计算与query的相似度，对检索到的context进行压缩
         context_compressor = ContextCompressor(
             documents=pages, embeddings=self.researcher.memory.get_embeddings()
         )
+        print("执行到了相似度匹配fetching_query_content2")
         return await context_compressor.async_get_context(
-            query=query, max_results=10, cost_callback=self.researcher.add_costs
+            query=query, max_results=10
         )
         
     async def get_similar_content_by_query_with_vectorstore(self, query, filter): 
@@ -32,12 +31,28 @@ class ContextManager:
             await stream_output(
                 "logs",
                 "fetching_query_format",
-                f" Getting relevant content based on query: {query}...",
+                f" 根据查询获取相关内容: {query}...",
                 self.researcher.websocket,
                 )
         vectorstore_compressor = VectorstoreCompressor(self.researcher.vector_store, filter)
         return await vectorstore_compressor.async_get_context(query=query, max_results=8)
-    
+
+    async def get_similar_content_by_query_with_vectorstore_web(self, query, pages, filter):
+        if self.researcher.verbose:
+            await stream_output(
+                "logs",
+                "fetching_query_format",
+                f" 根据查询获取相关内容: {query}...",
+                self.researcher.websocket,
+                )
+        for page in pages:
+            documents = self._process_document(self.report)
+
+        context_compressor = ContextCompressor(
+            documents=pages, embeddings=self.researcher.memory.get_embeddings()
+        )
+        vectorstore_compressor = VectorstoreCompressor(self.researcher.vector_store, filter)
+        return await vectorstore_compressor.async_get_context(query=query, max_results=8)
     async def get_similar_written_contents_by_draft_section_titles(
         self,
         current_subtopic: str,
@@ -57,7 +72,7 @@ class ContextManager:
         if relevant_contents and self.researcher.verbose:
             prettier_contents = "\n".join(relevant_contents)
             await stream_output(
-                "logs", "relevant_contents_context", f"📃 {prettier_contents}", self.researcher.websocket
+                "logs", "relevant_contents_context", f"{prettier_contents}", self.researcher.websocket
             )
 
         return relevant_contents
@@ -72,7 +87,7 @@ class ContextManager:
             await stream_output(
                 "logs",
                 "fetching_relevant_written_content",
-                f"🔎 Getting relevant written content based on query: {query}...",
+                f"根据查询获取相关书面内容: {query}...",
                 self.researcher.websocket,
             )
 
@@ -82,5 +97,5 @@ class ContextManager:
             similarity_threshold=similarity_threshold
         )
         return await written_content_compressor.async_get_context(
-            query=query, max_results=max_results, cost_callback=self.researcher.add_costs
+            query=query, max_results=max_results
         )

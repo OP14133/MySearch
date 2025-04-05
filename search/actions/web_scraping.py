@@ -34,7 +34,7 @@ def scrape_urls(urls, cfg=None) -> Tuple[List[Dict[str, Any]], List[Dict[str, An
     except Exception as e:
         print(f"{Fore.RED}Error in scrape_urls: {e}{Style.RESET_ALL}")
 
-    return scraped_data, images
+    return scraped_data
 
 async def filter_urls(urls: List[str], config: Config) -> List[str]:
     """

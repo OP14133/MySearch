@@ -2,23 +2,38 @@ import json
 import os
 import re
 import time
+import random
 import shutil
+import uuid
 from typing import Dict, List, Any
 from fastapi.responses import JSONResponse
-from MySearch.search.document.document import DocumentLoader
+from ...search.document.document import DocumentLoader
 # Add this import
-from MySearch.backend.utils import write_md_to_pdf, write_md_to_word, write_text_to_md
+from ..utils import write_md_to_pdf, write_md_to_word, write_text_to_md
 
 
 def sanitize_filename(filename: str) -> str:
     return re.sub(r"[^\w\s-]", "", filename).strip()
 
 
-async def handle_start_command(websocket, data: str, manager):
-    json_data = json.loads(data[6:])
+def generate_unique_id():
+    # 获取当前的时间戳（秒级）
+    timestamp = int(time.time())
+
+    # 生成一个随机数，确保在同一时间戳内有足够的随机性
+    random_part = random.randint(100000, 999999)
+
+    # 合并时间戳和随机数，形成一个唯一的ID
+    unique_id = f"{timestamp}{random_part}"
+
+    return unique_id
+
+async def handle_start_command(websocket, data, manager):
+    print("data:",data)
+    # json_data = json.loads(data)
     #解析 JSON 数据并返回
     task, report_type, source_urls, tone, headers, report_source = extract_command_data(
-        json_data)
+        data)
 
     if not task or not report_type:
         print("Error: Missing task or report_type")
@@ -26,8 +41,10 @@ async def handle_start_command(websocket, data: str, manager):
     #安全的文件名
     sanitized_filename = sanitize_filename(f"task_{int(time.time())}_{task}")
     #启动报告生成流程，异步
+    # mysql 插入task（用户问题）report_type（报告类型）
+    task_id = generate_unique_id()
     report = await manager.start_streaming(
-        task, report_type, report_source, source_urls, tone, websocket, headers
+        task, report_type, report_source, source_urls, tone, websocket, task_id, headers
     )
     report = str(report)
     #生成报告文件
@@ -41,10 +58,10 @@ async def handle_human_feedback(data: str):
     print(f"Received human feedback: {feedback_data}")
     # TODO: Add logic to forward the feedback to the appropriate agent or update the research state
 
-async def handle_chat(websocket, data: str, manager):
-    json_data = json.loads(data[4:])
-    print(f"Received chat message: {json_data.get('message')}")
-    await manager.chat(json_data.get("message"), websocket)
+async def handle_chat(websocket, data, manager):
+    # json_data = json.loads(data)
+    print(f"Received chat message: {data.get('context')}")#message是用户第二轮提问
+    await manager.chat(data.get("context"), websocket)
 
 async def generate_report_files(report: str, filename: str) -> Dict[str, str]:
     pdf_path = await write_md_to_pdf(report, filename)
@@ -108,24 +125,25 @@ async def handle_file_deletion(filename: str, DOC_PATH: str) -> JSONResponse:
         return JSONResponse(status_code=404, content={"message": "File not found"})
 
 
-async def execute_multi_agents(manager) -> Any:
-    websocket = manager.active_connections[0] if manager.active_connections else None
-    if websocket:
-        report = await run_research_task("Is AI in a hype cycle?", websocket, stream_output)
-        return {"report": report}
-    else:
-        return JSONResponse(status_code=400, content={"message": "No active WebSocket connection"})
+# async def execute_multi_agents(manager) -> Any:
+#     websocket = manager.active_connections[0] if manager.active_connections else None
+#     if websocket:
+#         # report = await run_research_task("Is AI in a hype cycle?", websocket, stream_output)
+#         return {"report": report}
+#     else:
+#         return JSONResponse(status_code=400, content={"message": "No active WebSocket connection"})
 
 
 async def handle_websocket_communication(websocket, manager):
     while True:
         data = await websocket.receive_text()#从 WebSocket 连接中接收文本消息，并将其存储在 data 变量中
-        if data.startswith("start"):
-            await handle_start_command(websocket, data, manager)#从接收到的消息中提取必要的数据，并启动一个报告生成流程。最后，它将生成的文件路径发送回客户端。
-        elif data.startswith("human_feedback"):#处理反馈数据
-            await handle_human_feedback(data)
-        elif data.startswith("chat"):
-            await handle_chat(websocket, data, manager)
+        json_data = json.loads(data)
+        data_type = json_data.get("type")
+        if data_type == "start":
+            # task_id = str(uuid.uuid4())
+            await handle_start_command(websocket, json_data, manager)#从接收到的消息中提取必要的数据，并启动一个报告生成流程。最后，它将生成的文件路径发送回客户端。
+        elif data_type == "chat":
+            await handle_chat(websocket, json_data, manager)
         else:
             print("Error: Unknown command or not enough parameters provided.")
 

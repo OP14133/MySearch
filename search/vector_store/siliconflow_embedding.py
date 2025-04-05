@@ -100,7 +100,22 @@ class SiliconFlowEmbeddings(BaseModel, Embeddings):
 
     async def aembed_query(self, text: str) -> List[float]:
         """Embed query text asynchronously."""
-        return await self.aembed_documents([text])
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": self.model,
+            "input": [text],  # 将单个文本作为列表传入
+            "encoding_format": "float"
+        }
+        response = await self._async_client.post(self.base_url, json=payload, headers=headers)
+        if response.status_code != 200:
+            raise Exception(f"Error {response.status_code}")
+        embedding = response.json().get("data", [])
+        if embedding:
+            return embedding[0]['embedding']  # 直接添加到结果中
+        return []
 
 # 初始化 SiliconFlow Embeddings
 siliconflow_token = "sk-yavtxhioyhzqqdmxihlkaumwqyhuczpsznqnypmuyrqqymun"

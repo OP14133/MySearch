@@ -4,7 +4,7 @@ from typing import Any
 from MySearch.search.agent import GPTResearcher
 
 
-class BasicReport:
+class SearchReport:
     def __init__(
         self,
         query: str,
@@ -43,5 +43,6 @@ class BasicReport:
         self.sub_queries = researcher.sub_queries
         self.context = researcher.context
         await researcher.conduct_research()
+        # researcher.rep
         report = await researcher.write_report()
         return report

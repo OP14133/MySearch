@@ -25,40 +25,90 @@ class BrowserManager:
             await stream_output(
                 "logs",
                 "scraping_urls",
-                f"🌐 Scraping content from {len(urls)} URLs...",
+                f"正在从{len(urls)}个URL中爬取内容...",
                 self.researcher.websocket,
             )
 
-        scraped_content, images = scrape_urls(urls, self.researcher.cfg)
+        scraped_content = scrape_urls(urls, self.researcher.cfg)
 
         self.researcher.add_research_sources(scraped_content)
-        new_images = self.select_top_images(images, k=4)  # Select top 2 images
-        self.researcher.add_research_images(new_images)
+        # new_images = self.select_top_images(images, k=4)  # Select top 2 images
+        # self.researcher.add_research_images(new_images)
 
-        if self.researcher.verbose:
+        if self.researcher and self.researcher.verbose:
             await stream_output(
                 "logs",
                 "scraping_content",
-                f"📄 Scraped {len(scraped_content)} pages of content",
+                f"抓取了 {len(scraped_content)} 页内容",
                 self.researcher.websocket,
             )
-            await stream_output(
-                "logs",
-                "scraping_images",
-                f"🖼️ Selected {len(new_images)} new images from {len(images)} total images",
-                self.researcher.websocket,
-                True,
-                new_images
-            )
+            #暂时不用图片功能
+            # await stream_output(
+            #     "logs",
+            #     "scraping_images",
+            #     f"从 {len(images)} 张图片中选择了 {len(new_images)} 张新图片",
+            #     self.researcher.websocket,
+            #     True,
+            #     new_images
+            # )
             await stream_output(
                 "logs",
                 "scraping_complete",
-                f"🌐 Scraping complete",
+                f"抓取完毕",
                 self.researcher.websocket,
             )
 
         return scraped_content
 
+
+    async def browse_urls_by_dict(self, sub_query_db: List[Dict]) -> List[Dict]:
+        """
+        Scrape content from a list of URLs.
+
+        Args:
+            urls (List[str]): List of URLs to scrape.
+
+        Returns:
+            List[Dict]: List of scraped content results.
+        """
+        if self.researcher.verbose:
+            await stream_output(
+                "logs",
+                "scraping_urls",
+                f"正在从{len(sub_query_db)}个URL中爬取内容...",
+                self.researcher.websocket,
+            )
+
+        scraped_content = scrape_urls(sub_query_db, self.researcher.cfg)
+
+        self.researcher.add_research_sources(scraped_content)
+        # new_images = self.select_top_images(images, k=4)  # Select top 2 images
+        # self.researcher.add_research_images(new_images)
+
+        if self.researcher and self.researcher.verbose:
+            await stream_output(
+                "logs",
+                "scraping_content",
+                f"抓取了 {len(scraped_content)} 页内容",
+                self.researcher.websocket,
+            )
+            #暂时不用图片功能
+            # await stream_output(
+            #     "logs",
+            #     "scraping_images",
+            #     f"从 {len(images)} 张图片中选择了 {len(new_images)} 张新图片",
+            #     self.researcher.websocket,
+            #     True,
+            #     new_images
+            # )
+            await stream_output(
+                "logs",
+                "scraping_complete",
+                f"抓取完毕",
+                self.researcher.websocket,
+            )
+
+        return scraped_content
     def select_top_images(self, images: List[Dict], k: int = 2) -> List[str]:
         """
         Select most relevant images and remove duplicates based on image content.

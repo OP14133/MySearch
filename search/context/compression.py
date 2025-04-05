@@ -11,7 +11,6 @@ from langchain.retrievers.document_compressors import (
 )
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from ..vector_store import VectorStoreWrapper
-from ..utils.costs import estimate_embedding_cost
 from ..memory.embeddings import OPENAI_EMBEDDING_MODEL
 
 
@@ -65,12 +64,11 @@ class ContextCompressor:
                           f"Content: {d.page_content}\n"
                           for i, d in enumerate(docs) if i < top_n)
 
-    async def async_get_context(self, query, max_results=5, cost_callback=None):
+    async def async_get_context(self, query, max_results=5):
         """从一组文档中检索与给定查询相关的文档，并返回这些文档的格式化版本。以下是对代码功能的详细解释："""
         compressed_docs = self.__get_contextual_retriever()
-        if cost_callback:
-            cost_callback(estimate_embedding_cost(model=OPENAI_EMBEDDING_MODEL, docs=self.documents))
         relevant_docs = await asyncio.to_thread(compressed_docs.invoke, query)
+        print("relevent")
         return self.__pretty_print_docs(relevant_docs, max_results)
 
 
@@ -99,9 +97,7 @@ class WrittenContentCompressor:
     def __pretty_docs_list(self, docs, top_n):
         return [f"Title: {d.metadata.get('section_title')}\nContent: {d.page_content}\n" for i, d in enumerate(docs) if i < top_n]
 
-    async def async_get_context(self, query, max_results=5, cost_callback=None):
+    async def async_get_context(self, query, max_results=5):
         compressed_docs = self.__get_contextual_retriever()
-        if cost_callback:
-            cost_callback(estimate_embedding_cost(model=OPENAI_EMBEDDING_MODEL, docs=self.documents))
         relevant_docs = await asyncio.to_thread(compressed_docs.invoke, query)
         return self.__pretty_docs_list(relevant_docs, max_results)

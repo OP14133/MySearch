@@ -27,7 +27,6 @@ async def generate_sub_queries(
     report_type: str,
     context: List[Dict[str, Any]],
     cfg: Config,
-    cost_callback: callable = None
 ) -> List[str]:
     """
     使用指定的模型生成子查询
@@ -39,7 +38,6 @@ async def generate_sub_queries(
         max_iterations: 最大研究轮次
         context: 搜索结果上下文
         cfg: Configuration object
-        cost_callback: Callback for cost calculation
     
     Returns:
         子查询列表
@@ -59,7 +57,6 @@ async def generate_sub_queries(
             temperature=1,
             max_tokens=None,
             llm_kwargs=cfg.llm_kwargs,
-            cost_callback=cost_callback,
         )
     except Exception as e:
         logger.warning(f"Error with strategic LLM: {e}. Falling back to smart LLM.")
@@ -69,7 +66,6 @@ async def generate_sub_queries(
             temperature=cfg.temperature,
             max_tokens=cfg.max_tokens,
             llm_kwargs=cfg.llm_kwargs,
-            cost_callback=cost_callback,
         )
 
     return json_repair.loads(response)
@@ -81,7 +77,6 @@ async def plan_research_outline(
     cfg: Config,
     parent_query: str,
     report_type: str,
-    cost_callback: callable = None,
 ) -> List[str]:
     """
     通过生成子查询规划研究大纲.
@@ -93,7 +88,6 @@ async def plan_research_outline(
         cfg: 配置对象
         parent_query: 父查询
         report_type: 报告类型
-        cost_callback: 成本计算回调函数
     
     Returns:
         子查询列表
@@ -105,7 +99,6 @@ async def plan_research_outline(
         report_type,
         search_results,
         cfg,
-        cost_callback
     )
 
     return sub_queries

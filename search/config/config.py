@@ -17,7 +17,7 @@ class Config:
         self.smart_token_limit = 4000
         retriever_env = os.environ.get("RETRIEVER", "tavily")
         self.retrievers = self.parse_retrievers(retriever_env)
-        self.max_iterations = 5
+        self.max_iterations = 3
         self.max_search_results_per_query = 2
         self.max_subtopics = 3
         self.embedding_model = os.getenv("EMBEDDING_MODEL", "")

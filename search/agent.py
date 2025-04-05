@@ -3,6 +3,8 @@ import json
 
 from .config import Config
 from .memory import Memory
+from .skills.curator import SourceCurator
+from .skills.deep_research import DeepResearchSkill
 from .utils.enum import ReportSource, ReportType, Tone
 from .llm_provider import GenericLLMProvider
 from .vector_store import VectorStoreWrapper
@@ -12,14 +14,13 @@ from .skills.researcher import ResearchConductor
 from .skills.writer import ReportGenerator
 from .skills.context_manager import ContextManager
 from .skills.browser import BrowserManager
-
+from .service.DialogueService import DialogueService
 from .actions import (
     add_references,
     extract_headers,
     extract_sections,
     table_of_contents,
     get_retrievers,
-    choose_agent
 )
 
 
@@ -44,8 +45,8 @@ class GPTResearcher:
         verbose: bool = True,
         context=[],
         headers: dict = None,
-        max_subtopics: int = 5,
-        history: dict = None
+        max_subtopics: int = 2,
+        task_id=str,
     ):
         self.query = query
         self.report_type = report_type
@@ -71,33 +72,51 @@ class GPTResearcher:
         self.verbose = verbose
         self.context = context
         self.headers = headers or {}
-        self.research_costs = 0.0
         self.retrievers = get_retrievers(self.headers, self.cfg)
         self.memory = Memory(
             self.cfg.embedding_provider, self.cfg.embedding_model, **self.cfg.embedding_kwargs
         )
-        self.sub_queries = None
+        self.sub_queries = []
         self.scrape_data = {}
         self.content = {}
         self.history = {}
+        self.task_id = task_id
 
         # Initialize components
         self.research_conductor: ResearchConductor = ResearchConductor(self)
         self.report_generator: ReportGenerator = ReportGenerator(self)
         self.context_manager: ContextManager = ContextManager(self)
         self.scraper_manager: BrowserManager = BrowserManager(self)
-
-    async def conduct_research(self):
+        self.dialogue_service: DialogueService = DialogueService()
+        self.source_curator: SourceCurator = SourceCurator(self)
+        self.deep_researcher: Optional[DeepResearchSkill] = None
+        if report_type == ReportType.DeepResearch.value:
+            self.deep_researcher = DeepResearchSkill(self)
+    async def conduct_research(self, on_progress=None):
+        if self.report_type == ReportType.DeepResearch.value and self.deep_researcher:
+            #lgq测试
+            self.deep_researcher.depth = 1
+            self.deep_researcher.breadth = 1
+            return await self._handle_deep_research(on_progress)
         if not (self.agent and self.role):
-            self.agent, self.role = await choose_agent(
-                query=self.query,
-                cfg=self.cfg,
-                parent_query=self.parent_query,
-                cost_callback=self.add_costs,
-                headers=self.headers,
-            )
-
+            self.agent = "舆情信息检索代理"
+            self.role = "你是一位专业的舆情分析AI助手，负责基于给定问题和上下文，检索并提取、整理并总结关键信息。你的任务是准确分析事件背景、传播动态、公众情绪和潜在影响，以结构化方式呈现，确保内容中立、全面且清晰。"
         self.context = await self.research_conductor.conduct_research()
+        return self.context
+
+    async def _handle_deep_research(self, on_progress=None):
+        """Handle deep research execution and logging."""
+        # Log deep research configuration
+        # await self._log_event("research", step="deep_research_initialize", details={
+        #     "type": "deep_research",
+        #     "breadth": self.deep_researcher.breadth,
+        #     "depth": self.deep_researcher.depth,
+        #     "concurrency": self.deep_researcher.concurrency_limit
+        # })
+
+        # Run deep research and get context
+        self.context = await self.deep_researcher.run(on_progress=on_progress)
+
         return self.context
 
     async def write_report(self, existing_headers: list = [], relevant_written_contents: list = [], ext_context=None) -> str:
@@ -107,6 +126,13 @@ class GPTResearcher:
             ext_context or self.context
         )
 
+    async def write_report_by_type(self, report_type: str,existing_headers: list = [], relevant_written_contents: list = [], ext_context=None) -> str:
+        return await self.report_generator.write_report_by_type(
+            report_type,
+            existing_headers,
+            relevant_written_contents,
+            ext_context or self.context
+        )
     async def write_report_conclusion(self, report_body: str) -> str:
         return await self.report_generator.write_report_conclusion(report_body)
 
@@ -164,13 +190,6 @@ class GPTResearcher:
     def get_research_context(self) -> list:
         return self.context
 
-    def get_costs(self) -> float:
-        return self.research_costs
-
     def set_verbose(self, verbose: bool):
         self.verbose = verbose
 
-    def add_costs(self, cost: float) -> None:
-        if not isinstance(cost, (float, int)):
-            raise ValueError("Cost must be an integer or float")
-        self.research_costs += cost

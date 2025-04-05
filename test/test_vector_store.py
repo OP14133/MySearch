@@ -1,8 +1,9 @@
 import asyncio
 import pytest
+import os
 from typing import List
 from MySearch.search.agent import GPTResearcher
-from MySearch.search.vector_store.siliconflow_embedding import  SiliconFlowEmbeddings
+from MySearch.search.vector_store.siliconflow_embedding import SiliconFlowEmbeddings
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS, InMemoryVectorStore
@@ -140,7 +141,11 @@ async def test_gpt_researcher_with_vector_store():
 
 @pytest.mark.asyncio
 async def test_store_in_vector_store_web():
-    vector_store = InMemoryVectorStore(embedding=SiliconFlowEmbeddings())
+    model = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
+    token = os.getenv("OPENAI_API_KEY","sk-yavtxhioyhzqqdmxihlkaumwqyhuczpsznqnypmuyrqqymun")
+    print(model,token)
+    vector_store = InMemoryVectorStore(embedding=SiliconFlowEmbeddings(model=os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),
+                    token=token))
     query = "大语言模型有哪些"
 
     researcher = GPTResearcher(
@@ -149,11 +154,10 @@ async def test_store_in_vector_store_web():
         report_source="web",
         vector_store=vector_store,
     )
-
     await researcher.conduct_research()
 
     related_contexts = await vector_store.asimilarity_search("GPT-4", k=2)
-
+    print(related_contexts)
     assert len(related_contexts) == 2
     # Add more assertions as needed to verify the results
 
@@ -234,3 +238,21 @@ async def test_store_in_vector_store_hybrids():
     related_contexts = await vector_store.asimilarity_search("GPT-4", k=2)
     
     assert len(related_contexts) == 2
+
+
+@pytest.mark.asyncio
+async def test_lgq():
+    model = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
+    token = os.getenv("OPENAI_API_KEY", "sk-yavtxhioyhzqqdmxihlkaumwqyhuczpsznqnypmuyrqqymun")
+    print(model, token)
+    embedding = SiliconFlowEmbeddings(model=os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),
+                                      token=token)
+    doc = embedding.embed_documents(["忘了开软件课拉进来待开发进啦卡机发啦卡卡代发","我饿借款人拉科技颗粒剂萨卡溜达鸡放大索拉卡飞机立卡"])
+    query = embedding.embed_query("软件")
+    for d in doc:
+        print(d)
+    # print("doc",doc)
+    print("query",query)
+    # vector_store = InMemoryVectorStore(embedding.)
+    #
+    # query = "大语言模型有哪些"

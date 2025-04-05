@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 class WebPageDetailsSchema(BaseModel):
+    task_id:str
     url: str
     title: Optional[str]
     body: Optional[str]
@@ -13,7 +14,6 @@ class DialogueSchema(BaseModel):
     original_question: str
     subqueries: List[str] = []
     urls: List[str] = []
-    conversations: Optional[dict] = None
-
-    class Config:
-        orm_mode = True
+    conversations: List[dict] = []
+    timeline: List[dict] = []
+    summery: str

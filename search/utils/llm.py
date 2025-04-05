@@ -10,7 +10,6 @@ from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
 
 from ..prompts import generate_subtopics_prompt
-from .costs import estimate_llm_cost
 from .validators import Subtopics
 
 
@@ -27,7 +26,7 @@ async def create_chat_completion(
         stream: Optional[bool] = False,
         websocket: Any | None = None,
         llm_kwargs: Dict[str, Any] | None = None,
-        cost_callback: callable = None
+        type: Optional[str] = None
 ) -> str:
     """使用 OpenAI API 创建聊天完成
         参数：
@@ -38,7 +37,6 @@ async def create_chat_completion(
             stream (bool, 可选): 是否流式传输响应。默认为 False。
             llm_provider (str, 可选): 要使用的 LLM 提供者。
             websocket (WebSocket): 当前请求中使用的 websocket，
-            cost_callback: 更新成本的回调函数
         返回：
             str: 聊天完成的响应
     """
@@ -58,13 +56,8 @@ async def create_chat_completion(
     # create response
     for _ in range(10):  # maximum of 10 attempts
         response = await provider.get_chat_response(
-            messages, stream, websocket
+            messages, stream, websocket, type=type
         )
-
-        if cost_callback:
-            llm_costs = estimate_llm_cost(str(messages), response)
-            cost_callback(llm_costs)
-
         return response
 
     logging.error(f"获取llm响应失败")

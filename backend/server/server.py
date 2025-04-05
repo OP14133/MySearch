@@ -1,7 +1,13 @@
 import json
 import os
-from typing import Dict, List
+import sys
+from pathlib import Path
 
+import uvicorn
+
+# 添加项目根目录到路径
+sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+from typing import Dict, List
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, File, UploadFile, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -11,11 +17,12 @@ from pydantic import BaseModel
 from MySearch.backend.server.websocket_manager import WebSocketManager
 from MySearch.backend.server.server_utils import (
     get_config_dict,
-    update_environment_variables, handle_file_upload, handle_file_deletion,
-    execute_multi_agents, handle_websocket_communication
+    update_environment_variables, handle_file_upload, handle_file_deletion, handle_websocket_communication
 )
-
-# Models
+# from langchain_community.vectorstores import InMemoryVectorStore
+# from MySearch.search.vector_store.siliconflow_embedding import SiliconFlowEmbeddings
+# from langchain.retrievers.document_compressors import EmbeddingsFilter
+# # Models
 
 
 class ResearchRequest(BaseModel):
@@ -44,14 +51,14 @@ class ConfigRequest(BaseModel):
 # App initialization
 app = FastAPI()
 
-# Static files and templates
-app.mount("/site", StaticFiles(directory="./frontend"), name="site")# 用于挂载静态文件目录，使得这些文件可以通过特定的 URL 路径访问。
-app.mount("/static", StaticFiles(directory="./frontend/static"), name="static")#用于处理模板文件，通常用于生成动态的 HTML 页面。
-templates = Jinja2Templates(directory="./frontend")
+# # Static files and templates
+# app.mount("/site", StaticFiles(directory="./MySearch/frontend"), name="site")# 用于挂载静态文件目录，使得这些文件可以通过特定的 URL 路径访问。
+# app.mount("/static", StaticFiles(directory="./MySearch/frontend/static"), name="static")#用于处理模板文件，通常用于生成动态的 HTML 页面。
+# templates = Jinja2Templates(directory="./MySearch/frontend")
 
 # WebSocket manager
 manager = WebSocketManager()
-
+# db = Database()
 # Middleware处理跨域资源共享（CORS）。CORS 是一种安全机制，用于控制哪些域可以访问你的 API。
 app.add_middleware(
     CORSMiddleware,
@@ -76,9 +83,9 @@ def startup_event():
 # Routes
 
 
-@app.get("/")
-async def read_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request, "report": None})
+# @app.get("/")
+# async def read_root(request: Request):
+#     return templates.TemplateResponse("index.html", {"request": request, "report": None})
 
 
 @app.get("/getConfig")
@@ -107,12 +114,6 @@ async def list_files():
     print(f"Files in {DOC_PATH}: {files}")
     return {"files": files}
 
-
-@app.post("/api/multi_agents")
-async def run_multi_agents():
-    return await execute_multi_agents(manager)
-
-
 @app.post("/setConfig")
 async def set_config(config: ConfigRequest):
     update_environment_variables(config.dict())
@@ -139,3 +140,5 @@ async def websocket_endpoint(websocket: WebSocket):
         await handle_websocket_communication(websocket, manager)
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
+if __name__ == "__main__":
+    uvicorn.run("server:app", host="127.0.0.1", port=8001, reload=True)

@@ -26,7 +26,7 @@ class Memory:
         _embeddings = None
         match embedding_provider:
             case "custom":
-                from MySearch.search.vector_store.siliconflow_embedding import SiliconFlowEmbeddings
+                from .vector_store.siliconflow_embedding import SiliconFlowEmbeddings
 
                 _embeddings = SiliconFlowEmbeddings(
                     model=os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),

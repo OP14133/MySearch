@@ -16,7 +16,8 @@ class DetailedReport:
         tone: Any = "",
         websocket: WebSocket = None,
         subtopics: List[Dict] = [],
-        headers: Optional[Dict] = None
+        headers: Optional[Dict] = None,
+        vector_store = None
     ):
         self.query = query
         self.report_type = report_type
@@ -27,6 +28,7 @@ class DetailedReport:
         self.websocket = websocket
         self.subtopics = subtopics
         self.headers = headers or {}
+        self.vector_store = vector_store
 
         self.gpt_researcher = GPTResearcher(
             query=self.query,
@@ -35,7 +37,8 @@ class DetailedReport:
             source_urls=self.source_urls,
             tone=self.tone,
             websocket=self.websocket,
-            headers=self.headers
+            headers=self.headers,
+            vector_store=self.vector_store
         )
         self.existing_headers: List[Dict] = []
         self.global_context: List[str] = []

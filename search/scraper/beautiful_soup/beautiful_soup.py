@@ -1,6 +1,6 @@
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-
+import chardet
 from ..utils import get_relevant_images, extract_title
 
 class BeautifulSoupScraper:
@@ -19,6 +19,9 @@ class BeautifulSoupScraper:
         """
         try:
             response = self.session.get(self.link, timeout=4)
+
+            detected_encoding = chardet.detect(response.content)['encoding']
+            response.encoding = detected_encoding if detected_encoding else response.apparent_encoding
             soup = BeautifulSoup(
                 response.content, "lxml", from_encoding=response.encoding
             )

@@ -32,7 +32,6 @@ async def test_scrape_data_by_query():
             self.visited_urls = set()
             self.report_source = ""
             self.report_type = ""
-            self.add_costs = None
             self.sub_queries = None
             self.scrape_data = {}
             self.content = {}

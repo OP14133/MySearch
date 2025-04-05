@@ -1,12 +1,15 @@
 import asyncio
+import logging
 import random
 import json
+import uuid
 from typing import Dict, Optional
 
 from ..actions.utils import stream_output
 from ..actions.query_processing import plan_research_outline, get_search_results
 from ..document import DocumentLoader, LangChainDocumentLoader
 from ..utils.enum import ReportSource, ReportType, Tone
+from MySearch.database.schema import WebPageDetailsSchema
 
 
 class ResearchConductor:
@@ -22,18 +25,23 @@ class ResearchConductor:
         """
         # 在每次研究任务开始时重置 visited_urls 和 source_urls
         self.researcher.visited_urls.clear()
+        research_data = []
         # 由于 report_type 被 report_source 取代，
         # 如果 report_source 不是 static，我们需要清空 source_urls
         if self.researcher.report_source != "static" and self.researcher.report_type != "sources":
             self.researcher.source_urls = []
 
-        if self.researcher.verbose:
-            await stream_output(
-                "logs",
-                "starting_research",
-                f"🔎 Starting the research task for '{self.researcher.query}'...",
-                self.researcher.websocket,
-            )
+        await stream_output(
+            "logs",
+            "starting_research",
+            f"开始为 '{self.researcher.query}' 执行检索任务...",
+            self.researcher.websocket,
+        )
+        await stream_output(
+            type="task_id",
+            content=None,
+            output=self.researcher.task_id
+        )
 
         if self.researcher.verbose:
             await stream_output("logs", "agent_generated", self.researcher.agent, self.researcher.websocket)
@@ -70,6 +78,8 @@ class ResearchConductor:
 
         elif self.researcher.report_source == ReportSource.LangChainVectorStore.value:
             self.researcher.context = await self.__get_context_by_vectorstore(self.researcher.query, self.researcher.vector_store_filter)
+        # elif self.researcher.report_type == ReportType.ChatReport:
+        #     self.researcher.context = await self.__get_context_by_search(self.researcher.query, self.researcher.vector_store_filter)
         # 默认的基于网页的研究
         else:
             self.researcher.context = await self.__get_context_by_search(self.researcher.query)
@@ -78,10 +88,10 @@ class ResearchConductor:
             await stream_output(
                 "logs",
                 "research_step_finalized",
-                f"研究步骤已完成.\n💸 总研究成本: ${self.researcher.get_costs()}",
+                f"研究步骤已完成.",
                 self.researcher.websocket,
             )
-
+        print("研究完成")
         return self.researcher.context
 
     async def __get_context_by_urls(self, urls):
@@ -93,7 +103,7 @@ class ResearchConductor:
             await stream_output(
                 "logs",
                 "source_urls",
-                f"🗂️ 我将基于以下 URL 进行研究: {new_search_urls}...",
+                f"我将基于以下 URL 进行研究: {new_search_urls}...",
                 self.researcher.websocket,
             )
 
@@ -117,11 +127,12 @@ class ResearchConductor:
         if self.researcher.report_type != "subtopic_report":
             sub_queries.append(query)
 
+        self.researcher.sub_queries = sub_queries
         if self.researcher.verbose:
             await stream_output(
                 "logs",
                 "subqueries",
-                f"🗂️  我将基于以下查询进行研究: {sub_queries}...",
+                f"我将基于以下子查询进行研究: {sub_queries}...",
                 self.researcher.websocket,
                 True,
                 sub_queries,
@@ -136,6 +147,33 @@ class ResearchConductor:
         )
         return context
 
+    async def __get_chat_context_by_vectorstore(self, query, filter: Optional[dict] = None):
+        """
+        通过向量存储生成研究任务的上下文
+        Returns:
+            context: List of context
+        """
+        context = []
+
+        # if self.researcher.verbose:
+        #     await stream_output(
+        #         "logs",
+        #         "subqueries",
+        #         f"我将基于以下子查询进行研究: {sub_queries}...",
+        #         self.researcher.websocket,
+        #         True,
+        #         sub_queries,
+        #     )
+
+        # 使用 asyncio.gather 异步处理子查询
+        context = await self.__process_sub_query_with_vectorstore(query, filter)
+        # context = await asyncio.gather(
+        #     *[
+        #         self.__process_sub_query_with_vectorstore(query, filter)
+        #         for sub_query in sub_queries
+        #     ]
+        # )
+        return context
     async def __get_context_by_search(self, query, scraped_data: list = []):
         """
         通过搜索查询抓取结果生成研究任务的上下文
@@ -145,29 +183,59 @@ class ResearchConductor:
         context = []
         # 生成包含原始查询的子查询
         sub_queries = await self.plan_research(query)
+        """//lgq max_iteration这里要修改提示词，第二层子问题每个问题三个，并且不需要按照五个维度，只按照一个维度展开三个问题
+        ['2022年俄乌冲突的背景和起因', '2022年俄乌冲突的关键转折点和节点', '2022年俄乌冲突当前进展 2025年4月', '社交媒体上关于2022年俄乌冲突的公众情绪和讨论', '2022年俄乌冲突对国际社会及经济的影响分析']
+        """
         # 如果这不是子研究的一部分，添加原始查询以获得更好的结果
         if self.researcher.report_type != "subtopic_report":
             sub_queries.append(query)
-
+        self.researcher.sub_queries = sub_queries
         #是否是详细模式，详细模式输出更多的日志信息
         if self.researcher.verbose:
             await stream_output(
                 "logs",
                 "subqueries",
-                f"🗂️ 我将基于以下查询进行研究: {sub_queries}...",
+                f"我将基于以下子查询进行研究: {sub_queries}...",
                 self.researcher.websocket,
                 True,
                 sub_queries,
             )
-
-        # 使用 asyncio.gather 异步处理子查询
-        context = await asyncio.gather(
-            *[
-                self.__process_sub_query(sub_query, scraped_data)
-                for sub_query in sub_queries
-            ]
+        await stream_output(
+            "sub_queries",
+            "sub_queries",
+            sub_queries,
+            self.researcher.websocket,
+            True,
         )
-        return context
+        try:
+            context = await asyncio.gather(
+                *[
+                    self.__process_sub_query(sub_query, scraped_data)
+                    for sub_query in sub_queries
+                ]
+            )
+            # self.logger.info(f"Gathered context from {len(context)} sub-queries")
+            # Filter out empty results and join the context
+            context = [c for c in context if c]
+            if context:
+                combined_context = " ".join(context)
+                # self.logger.info(f"Combined context size: {len(combined_context)}")
+                return combined_context
+            return []
+        except Exception as e:
+            print(f"Error during web search___: {e}")
+            # logger.error(f"Error in generating draft section titles: {e}")
+            # self.logger.error(f"Error during web search: {e}", exc_info=True)
+            return []
+        # # 使用 asyncio.gather 异步处理子查询
+        # context = await asyncio.gather(
+        #     *[
+        #         self.__process_sub_query(sub_query, scraped_data)
+        #         for sub_query in sub_queries
+        #     ]
+        # )
+        # context = [c for c in context if c]
+        # return context
 
     async def __process_sub_query_with_vectorstore(self, sub_query: str, filter: Optional[dict] = None):
         """接受子查询并从用户提供的向量存储中收集上下文
@@ -182,7 +250,7 @@ class ResearchConductor:
             await stream_output(
                 "logs",
                 "running_subquery_with_vectorstore_research",
-                f"\n🔍 正在为 '{sub_query}'进行研究...",
+                f"\n🔍 正在为子问题'{sub_query}'进行研究...",
                 self.researcher.websocket,
             )
 
@@ -196,7 +264,7 @@ class ResearchConductor:
             await stream_output(
                 "logs",
                 "subquery_context_not_found",
-                f"🤷 未找到 '{sub_query}'的内容...",
+                f"未找到子问题“'{sub_query}'”的内容...",
                 self.researcher.websocket,
             )
         return content
@@ -215,25 +283,38 @@ class ResearchConductor:
             await stream_output(
                 "logs",
                 "running_subquery_research",
-                f"\n🔍 正在为 '{sub_query}'进行研究...",
+                f"\n正在为子问题'{sub_query}'进行研究...",
                 self.researcher.websocket,
             )
 
         if not scraped_data:
             scraped_data = await self.__scrape_data_by_query(sub_query)
+        #lgq 这里是通过相似度匹配获取，其实可以直接从vector_store获取，否则进行了两次embedding
+        #并且现在设置的max_results=10，可以减少一点
+        #而且获取到数据是否可以直接调用模型生成一篇报告
 
-        content = await self.researcher.context_manager.get_similar_content_by_query(sub_query, scraped_data)
-        if content and self.researcher.verbose:
-            await stream_output(
-                "logs", "subquery_context_window", f"📃 {content}", self.researcher.websocket
-            )
-        elif self.researcher.verbose:
-            await stream_output(
-                "logs",
-                "subquery_context_not_found",
-                f"🤷 未找到 '{sub_query}'的内容...",
-                self.researcher.websocket,
-            )
+        # content = await self.researcher.context_manager.get_similar_content_by_query(sub_query, scraped_data)
+        try:
+            # 调用获取相似内容的函数
+            content = await self.researcher.context_manager.get_similar_content_by_query(sub_query, scraped_data)
+            print("相似度匹配结果content", content)
+
+        except Exception as e:
+            # 捕获所有异常并记录错误信息
+            logging.error(f"Error occurred while fetching similar content: {str(e)}")
+
+#太长了
+        # if content and self.researcher.verbose:
+        #     await stream_output(
+        #         "logs", "subquery_context_window", f"📃 {content}", self.researcher.websocket
+        #     )
+        # elif self.researcher.verbose:
+        #     await stream_output(
+        #         "logs",
+        #         "subquery_context_not_found",
+        #         f"未找到子问题“'{sub_query}'”的内容...",
+        #         self.researcher.websocket,
+        #     )
         return content
 
     async def __get_new_urls(self, url_set_input):
@@ -251,7 +332,7 @@ class ResearchConductor:
                     await stream_output(
                         "logs",
                         "added_source_url",
-                        f"✅ Added source url to research: {url}\n",
+                        f"新增url: {url}\n",
                         self.researcher.websocket,
                         True,
                         url,
@@ -270,7 +351,7 @@ class ResearchConductor:
             list: 抓取到内容的结果列表.
         """
         new_search_urls = []
-
+        url_body_dict = {}
         # 遍历所有检索器
         for retriever_class in self.researcher.retrievers:
             # 使用子查询实例化检索器
@@ -284,7 +365,10 @@ class ResearchConductor:
             # 从搜索结果中收集新的url
             search_urls = [url.get("href") for url in search_results]
             new_search_urls.extend(search_urls)
-
+            for result in search_results:
+                url = result.get("href")
+                body = result.get("body")
+                url_body_dict[url] = body
         # 获取不重复的URLS
         new_search_urls = await self.__get_new_urls(new_search_urls)
         random.shuffle(new_search_urls)
@@ -294,23 +378,46 @@ class ResearchConductor:
             await stream_output(
                 "logs",
                 "researching",
-                f"🤔 在多个来源中研究相关信息...\n",
+                f"在多个来源中研究相关信息...\n",
                 self.researcher.websocket,
             )
-
         # 抓取新 URLS
         scraped_content = await self.researcher.scraper_manager.browse_urls(new_search_urls)
+        if not scraped_content:
+            scraped_content = [{"url": url, "raw_content": "", "title": "", "body": url_body_dict.get(url, "")}
+                               for url in new_search_urls]
 
-        if self.researcher.vector_store:
-            self.researcher.vector_store.load(scraped_content)
-
+        for each in scraped_content:
+            url = each.get("url")
+            raw_content = each.get("raw_content")
+            title = each.get("title")or""
+            body = url_body_dict.get(url) or ""
+            if not raw_content:
+                print("没有raw_content")
+                each["raw_content"] = f"{title}\n{body}"
+                print("成功处理raw_content"+each["raw_content"])
+        #     webPage = WebPageDetailsSchema(
+        #         task_id=self.researcher.task_id,
+        #         url=url,
+        #         title=title,
+        #         body=body,
+        #         image_urls=image_urls,
+        #         content=content
+        #     )
+        #     self.researcher.dialogue_service.create_web_page_details(webPage)
+        # print("scraped_content____:", scraped_content)
+        try:
+            if self.researcher.vector_store:
+                self.researcher.vector_store.vector_store.load(scraped_content)
+        except Exception as e:
+            logging.error(f"An unexpected error occurred: {str(e)}")
         return scraped_content
 
     async def plan_research(self, query):
         await stream_output(
             "logs",
             "planning_research",
-            f"🌐 浏览网页以了解更多关于任务的信息: {query}...",
+            f"浏览网页检索更多关于任务的信息: {query}...",
             self.researcher.websocket,
         )
 
@@ -319,7 +426,7 @@ class ResearchConductor:
         await stream_output(
             "logs",
             "planning_research",
-            f"🤔 规划研究策略和子任务 (这可能需要一分钟)...",
+            f"规划研究策略和子任务...",
             self.researcher.websocket,
         )
 
@@ -330,5 +437,6 @@ class ResearchConductor:
             cfg=self.researcher.cfg,
             parent_query=self.researcher.parent_query,
             report_type=self.researcher.report_type,
-            cost_callback=self.researcher.add_costs,
         )
+
+

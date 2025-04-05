@@ -5,7 +5,7 @@ from ..utils.llm import create_chat_completion
 from ..prompts import auto_agent_instructions
 
 async def choose_agent(
-    query, cfg, parent_query=None, cost_callback: callable = None, headers=None
+    query, cfg, parent_query=None, headers=None
 ):
     """
     根据查询自动选择代理，并生成代理角色提示。
@@ -13,7 +13,6 @@ async def choose_agent(
         parent_query: 在某些情况下，搜索是在主查询的子主题上进行的。父查询允许代理知道主要上下文，以便更好地推理。
         query: 原始查询
         cfg: Config
-        cost_callback: 计算llm花费
 
     Returns:
         agent: Agent 名称
@@ -31,7 +30,6 @@ async def choose_agent(
             ],
             temperature=0.15,
             llm_kwargs=cfg.llm_kwargs,
-            cost_callback=cost_callback,
         )
 
         agent_dict = json.loads(response)

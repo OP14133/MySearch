@@ -20,7 +20,6 @@ async def write_report_introduction(
     agent_role_prompt: str,
     config: Config,
     websocket=None,
-    cost_callback: callable = None
 ) -> str:
     """
     Generate an introduction for the report.
@@ -31,7 +30,6 @@ async def write_report_introduction(
         role (str): The role of the agent.
         config (Config): Configuration object.
         websocket: WebSocket connection for streaming output.
-        cost_callback (callable, optional): Callback for calculating LLM costs.
 
     Returns:
         str: The generated introduction.
@@ -49,7 +47,6 @@ async def write_report_introduction(
             websocket=websocket,
             max_tokens=config.smart_token_limit,
             llm_kwargs=config.llm_kwargs,
-            cost_callback=cost_callback,
         )
         return introduction
     except Exception as e:
@@ -63,7 +60,6 @@ async def write_conclusion(
     agent_role_prompt: str,
     config: Config,
     websocket=None,
-    cost_callback: callable = None
 ) -> str:
     """
     Write a conclusion for the report.
@@ -74,7 +70,6 @@ async def write_conclusion(
         role (str): The role of the agent.
         config (Config): Configuration object.
         websocket: WebSocket connection for streaming output.
-        cost_callback (callable, optional): Callback for calculating LLM costs.
 
     Returns:
         str: The generated conclusion.
@@ -91,7 +86,6 @@ async def write_conclusion(
             websocket=websocket,
             max_tokens=config.smart_token_limit,
             llm_kwargs=config.llm_kwargs,
-            cost_callback=cost_callback,
         )
         return conclusion
     except Exception as e:
@@ -105,7 +99,6 @@ async def summarize_url(
     role: str,
     config: Config,
     websocket=None,
-    cost_callback: callable = None
 ) -> str:
     """
     Summarize the content of a URL.
@@ -116,7 +109,6 @@ async def summarize_url(
         role (str): The role of the agent.
         config (Config): Configuration object.
         websocket: WebSocket connection for streaming output.
-        cost_callback (callable, optional): Callback for calculating LLM costs.
 
     Returns:
         str: The summarized content.
@@ -133,7 +125,6 @@ async def summarize_url(
             websocket=websocket,
             max_tokens=config.smart_token_limit,
             llm_kwargs=config.llm_kwargs,
-            cost_callback=cost_callback,
         )
         return summary
     except Exception as e:
@@ -148,7 +139,6 @@ async def generate_draft_section_titles(
     role: str,
     config: Config,
     websocket=None,
-    cost_callback: callable = None
 ) -> List[str]:
     """
     Generate draft section titles for the report.
@@ -159,7 +149,6 @@ async def generate_draft_section_titles(
         role (str): The role of the agent.
         config (Config): Configuration object.
         websocket: WebSocket connection for streaming output.
-        cost_callback (callable, optional): Callback for calculating LLM costs.
 
     Returns:
         List[str]: A list of generated section titles.
@@ -177,7 +166,6 @@ async def generate_draft_section_titles(
             websocket=None,
             max_tokens=config.max_tokens,
             llm_kwargs=config.llm_kwargs,
-            cost_callback=cost_callback,
         )
         return section_titles.split("\n")
     except Exception as e:
@@ -197,7 +185,6 @@ async def generate_report(
     main_topic: str = "",
     existing_headers: list = [],
     relevant_written_contents: list = [],
-    cost_callback: callable = None,
     headers=None,
 ):
     """
@@ -213,7 +200,6 @@ async def generate_report(
         main_topic:
         existing_headers:
         relevant_written_contents:
-        cost_callback:
 
     Returns:
         report:
@@ -227,6 +213,11 @@ async def generate_report(
     else:
         content = f"{generate_prompt(query, context, report_source, report_format=cfg.report_format, tone=tone, total_words=cfg.total_words)}"
     try:
+        message = [
+            {"role": "system", "content": f"{agent_role_prompt}"},
+            {"role": "user", "content": content},
+        ]
+        print("生成报告的message：",message)
         report = await create_chat_completion(
             model=cfg.smart_model,
             messages=[
@@ -238,7 +229,7 @@ async def generate_report(
             websocket=websocket,
             max_tokens=cfg.smart_token_limit,
             llm_kwargs=cfg.llm_kwargs,
-            cost_callback=cost_callback,
+            type=report_type,
         )
     except Exception as e:
         print(f"Error in generate_report: {e}")
