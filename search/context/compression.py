@@ -66,10 +66,17 @@ class ContextCompressor:
 
     async def async_get_context(self, query, max_results=5):
         """从一组文档中检索与给定查询相关的文档，并返回这些文档的格式化版本。以下是对代码功能的详细解释："""
-        compressed_docs = self.__get_contextual_retriever()
-        relevant_docs = await asyncio.to_thread(compressed_docs.invoke, query)
-        print("relevent")
-        return self.__pretty_print_docs(relevant_docs, max_results)
+        # compressed_docs = self.__get_contextual_retriever()
+        # relevant_docs = await asyncio.to_thread(compressed_docs.invoke, query)
+        # # print("Relevant Docs:", relevant_docs)
+        # return self.__pretty_print_docs(relevant_docs, max_results)
+        try:
+            compressed_docs = self.__get_contextual_retriever()
+            relevant_docs = await asyncio.to_thread(compressed_docs.invoke, query)
+            return self.__pretty_print_docs(relevant_docs, max_results)
+        except Exception as e:
+            print("❌ async_get_context 出错:", e)
+            raise
 
 
 class WrittenContentCompressor:

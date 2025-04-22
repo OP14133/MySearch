@@ -46,8 +46,16 @@ class Dialogue(Base):
     conversations = Column(JSON, default=None, nullable=True)  # 存储对话信息的 JSON 字段
     summery = Column(Text, nullable=True)
     timeline = Column(JSON, default=list, nullable=True)  # 新增时间线列，存储JSON格式的时间线列表
+    wordcloud = Column(JSON, default=list, nullable=True)  # 新增词云列，存储 List[Dict[str, int]] 格式的数据
     created_at = Column(TIMESTAMP, default=datetime.utcnow())  # 创建时间
     updated_at = Column(TIMESTAMP, default=datetime.utcnow(), onupdate=datetime.utcnow())  # 更新时间
+
+    def __repr__(self):
+        return (
+            f"<Dialogue(id={self.id}, task_id={self.task_id}, original_question={self.original_question}, "
+            f"subqueries={self.subqueries}, urls={self.urls}, conversations={self.conversations}, "
+            f"summery={self.summery}, timeline={self.timeline}, wordcloud={self.wordcloud})>"
+        )
 
 class WebPageDetails(Base):
     __tablename__ = 'web_page_details'

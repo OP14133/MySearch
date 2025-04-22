@@ -25,6 +25,7 @@ async def main(task: str):
     memory = Memory(cfg.embedding_provider, cfg.embedding_model, **cfg.embedding_kwargs)
     embeddings = memory.get_embeddings()
     vector_store = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
+    vector_store.get()
     # Initialize researcher with deep research type
     researcher = GPTResearcher(
         query=task,

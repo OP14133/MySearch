@@ -1,4 +1,5 @@
-from typing import List, Dict, Any, Optional, Set
+import re
+from typing import List, Dict, Any, Optional, Set, Tuple
 import asyncio
 import logging
 import time
@@ -53,7 +54,7 @@ class DeepResearchSkill:
         self.researcher = researcher
         self.breadth = getattr(researcher.cfg, 'deep_research_breadth', 5)
         self.depth = getattr(researcher.cfg, 'deep_research_depth', 2)
-        self.concurrency_limit = getattr(researcher.cfg, 'deep_research_concurrency', 5)
+        self.concurrency_limit = getattr(researcher.cfg, 'deep_research_concurrency', 3)
         self.websocket = researcher.websocket
         self.tone = researcher.tone
         self.config_path = researcher.cfg.config_path if hasattr(researcher.cfg, 'config_path') else None
@@ -96,8 +97,20 @@ class DeepResearchSkill:
 
         if current_query:
             queries.append(current_query)
+        results = queries[:num_queries]
+        # ✅ 推送结果到前端
+        formatted_output = "\n".join([
+            f"{i + 1}. Query: {q['query']}\n   Goal: {q['researchGoal']}" for i, q in enumerate(results)
+        ])
 
-        return queries[:num_queries]
+        await stream_output(
+            type="logs",
+            content="已生成搜索查询和研究目标",
+            output=formatted_output,
+            websocket=self.websocket,
+            metadata={"queries": results}
+        )
+        return results
 
     async def generate_research_plan(self, query: str, num_questions: int = 5) -> List[str]:
         """Generate follow-up questions to clarify research direction"""
@@ -138,9 +151,113 @@ class DeepResearchSkill:
         questions = [q.replace('Question:', '').strip()
                      for q in response.split('\n')
                      if q.strip().startswith('Question:')]
+        await stream_output(
+            type="logs",
+            content="已生成研究问题",
+            output="\n".join([f"{i + 1}. {q}" for i, q in enumerate(questions[:num_questions])]),
+            websocket=self.websocket,
+            metadata={"questions": questions[:num_questions]}
+        )
         return questions[:num_questions]
 
-    async def process_research_results(self, query: str, context: str, num_learnings: int = 3) -> Dict[str, List[str]]:
+    async def extract_keywords_and_date_range(self, query: str) -> Tuple[str, str, str]:
+        """
+        根据查询和搜索结果，生成适用于社交媒体搜索的关键词和事件时间范围。
+
+        返回:
+            keywords: 用于搜索的关键词表达式 (如: "香菇 OR 金针菇 OR (蘑菇 AND 美食)")
+            start_timestamp: 起始时间戳 (字符串格式)
+            end_timestamp: 结束时间戳 (字符串格式)
+        """
+        try:
+            # Step 1: 获取搜索结果
+            search_results = await get_search_results(query, self.researcher.retrievers[0])
+            logger.info(f"已获取初始搜索结果，共 {len(search_results)} 条")
+
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # Step 2: 构造 prompt
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是一位信息提取专家，擅长从新闻摘要中提取关键词与事件时间范围。"
+                        "用户希望通过关键词和时间段在社交媒体中进一步检索相关新闻和讨论。"
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": f"""原始查询: {query}
+
+    当前时间: {current_time}
+
+    搜索结果:
+    {search_results}
+
+    请根据搜索结果完成以下任务：
+    1. 提取用于社交媒体搜索的关键词逻辑表达式，尽可能覆盖不同表达方式（如同义词、缩写等），表达式中使用 AND / OR 连接，例如："香菇 OR 金针菇 OR (蘑菇 AND 美食)"。
+    2. 分析事件发生的时间范围，返回一个标准化格式："YYYY-MM-DD ~ YYYY-MM-DD"，用于作为检索时间窗口，注意时间范围不超过7天，选择该事件最关键的事件节点范围。
+
+    最终请严格按照如下格式输出：
+    keywords: xxx
+    date: yyyy-mm-dd ~ yyyy-mm-dd
+    - “keywords:” 和 “date:” 两行必须各自独占一行，不能拆分或省略。
+    - 格式必须严格符合，否则无法被识别。
+    """
+                }
+            ]
+
+            # Step 3: 调用大模型
+            response = await create_chat_completion(
+                model=self.researcher.cfg.strategic_model,
+                messages=messages,
+                temperature=0.3,
+                llm_kwargs=self.researcher.cfg.llm_kwargs,
+            )
+
+            # Step 4: 解析大模型返回
+            keyword_line = ""
+            date_line = ""
+            start_timestamp = ""
+            end_timestamp = ""
+
+            # 提取关键词
+            keywords_match = re.search(r"keywords:\s*(.+)", response, re.IGNORECASE)
+            if keywords_match:
+                keyword_line = keywords_match.group(1).strip()
+
+            # 提取日期范围
+            date_match = re.search(r"date:\s*(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})", response)
+            if date_match:
+                start_str, end_str = date_match.group(1), date_match.group(2)
+                try:
+                    start_dt = datetime.strptime(start_str, "%Y-%m-%d")
+                    end_dt = datetime.strptime(end_str, "%Y-%m-%d")
+                    start_timestamp = str(int(start_dt.timestamp()))
+                    end_timestamp = str(int(end_dt.timestamp()))
+                except Exception as e:
+                    logger.warning(f"时间格式解析失败: {e}")
+
+            # Step 5: 如果任何字段缺失，则使用默认值
+            if not keyword_line:
+                logger.warning("关键词提取失败，使用原始 query 作为 fallback")
+                keyword_line = query
+
+            if not start_timestamp or not end_timestamp:
+                logger.warning("时间范围提取失败，使用默认时间范围（近三天）")
+                fallback_start = datetime.now() - timedelta(days=3)
+                fallback_end = datetime.now()
+                start_timestamp = str(int(fallback_start.timestamp()))
+                end_timestamp = str(int(fallback_end.timestamp()))
+
+            return keyword_line, start_timestamp, end_timestamp
+
+        except Exception as e:
+            logger.error(f"提取关键词与时间范围失败，使用默认值。错误详情: {e}")
+            fallback_start = datetime.now() - timedelta(days=3)
+            fallback_end = datetime.now()
+            return query, str(int(fallback_start.timestamp())), str(int(fallback_end.timestamp()))
+    async def process_research_results(self, query: str, context: str, num_learnings: int = 1) -> Dict[str, List[str]]:
         """处理调研结果，以提取关键发现和后续问题"""
         messages = [
             {"role": "system", "content": "You are an expert researcher analyzing search results."},
@@ -184,7 +301,18 @@ class DeepResearchSkill:
                         learnings.append(line.replace('Learning:', '').strip())
             elif line.startswith('Question:'):
                 questions.append(line.replace('Question:', '').strip())
+        output = f"针对“{query}”这个问题，系统生成了以下后续问题："
+        for idx, q in enumerate(questions[:num_learnings], 1):
+            output += f"\n{idx}. {q}"
 
+        await stream_output(
+            type="logs",
+            content="生成后续问题",
+            output=output,
+            websocket=self.researcher.websocket,
+            metadata={"current_query":query,
+                      "followUpQuestions":questions[:num_learnings]}  # 结构化数据可供前端使用
+        )
         return {
             'learnings': learnings[:num_learnings],
             'followUpQuestions': questions[:num_learnings],
@@ -220,6 +348,7 @@ class DeepResearchSkill:
         子问题 ，目前设置为了1
         [{'query': '2022年俄乌冲突的背景、演变过程及关键转折点', 'researchGoal': '研究2022年俄乌冲突的起因、发展过程以及导致战争全面爆发的关键事件和时间节点。'}]
         """
+
         progress.total_queries = len(serp_queries)
 
         all_learnings = learnings.copy()
@@ -253,6 +382,7 @@ class DeepResearchSkill:
                         report_type=ReportType.ResearchReport.value,
                         report_source=ReportSource.Web.value,
                         tone=self.tone,
+                        is_deep=1,
                         websocket=self.websocket,
                         headers=self.headers,
                         visited_urls=self.visited_urls,
@@ -268,6 +398,7 @@ class DeepResearchSkill:
                     sources = researcher.research_sources
 
                     # 根据返回的结果判断是否有新的问题，扩展查询Process results to extract learnings and citations
+
                     results = await self.process_research_results(
                         query=serp_query['query'],
                         context=context
@@ -324,21 +455,22 @@ class DeepResearchSkill:
                 Previous research goal: {result['researchGoal']}
                 Follow-up questions: {' '.join(result['followUpQuestions'])}
                 """
+                deeper_results = {}
+                if result['followUpQuestions']:
+                    # Recursive research
+                    deeper_results = await self.deep_research(
+                        query=next_query,
+                        breadth=new_breadth,
+                        depth=new_depth,
+                        learnings=all_learnings,
+                        citations=all_citations,
+                        visited_urls=all_visited_urls,
+                        on_progress=on_progress
+                    )
 
-                # Recursive research
-                deeper_results = await self.deep_research(
-                    query=next_query,
-                    breadth=new_breadth,
-                    depth=new_depth,
-                    learnings=all_learnings,
-                    citations=all_citations,
-                    visited_urls=all_visited_urls,
-                    on_progress=on_progress
-                )
-
-                all_learnings = deeper_results['learnings']
-                all_visited_urls.update(deeper_results['visited_urls'])
-                all_citations.update(deeper_results['citations'])
+                all_learnings = deeper_results.get('learnings', [])
+                all_visited_urls.update(deeper_results.get('visited_urls', []))
+                all_citations.update(deeper_results.get('citations', []))
                 if deeper_results.get('context'):
                     all_context.extend(deeper_results['context'])
                 if deeper_results.get('sources'):
@@ -366,7 +498,7 @@ class DeepResearchSkill:
         # Log initial costs
         # initial_costs = self.researcher.get_costs()
         follow_up_questions = await self.generate_research_plan(self.researcher.query)
-        #follow_up_questions示例 字符串列表
+        # follow_up_questions示例 字符串列表
         """
         ['2022年俄乌冲突的起因是什么，主要涉及哪些关键人物和组织，冲突爆发后经历了哪些重要的时间节点？', 
         '截至2025年4月，俄乌战争的最新动态是什么？双方在最近的军事行动中取得了哪些进展或遭遇了哪些挫折？', 
@@ -374,13 +506,29 @@ class DeepResearchSkill:
         '俄乌战争对乌克兰和俄罗斯的经济、政治、社会等方面产生了哪些具体影响？国际社会对两国采取了哪些应对措施？', 
         '从2022年俄乌冲突爆发至今，俄乌战争的发展脉络是怎样的？冲突双方的力量对比发生了哪些变化，国际社会的立场和态度有何调整？']
         """
-        #lgq这里有问题，没有发送到前端，self.websocket和self.researcher.websocket是同一个
-        await stream_output(
-            "plan",
-            "research_plan",
-            follow_up_questions,
-            self.researcher.websocket,
-        )
+
+        # keywords, start_ts, end_ts = await self.extract_keywords_and_date_range(self.researcher.query)
+        # content = f"关键词: {keywords}\n时间范围: {start_ts} ~ {end_ts}"
+        # output = {
+        #     "keywords": keywords,
+        #     "start_time": start_ts,
+        #     "end_time": end_ts
+        # }
+        # await stream_output(
+        #     type="keyword_range",  # 也可以换成自定义类型，比如 "keyword_range"
+        #     content="已提取关键词与时间范围",
+        #     output=content,
+        #     websocket=self.researcher.websocket,
+        #     metadata=output  # 结构化数据可供前端使用
+        # )
+
+        # #lgq这里有问题，没有发送到前端，self.websocket和self.researcher.websocket是同一个
+        # await stream_output(
+        #     "init_thinking",
+        #     "",
+        #     follow_up_questions,
+        #     self.researcher.websocket,
+        # )
         answers = ["Automatically proceeding with research"] * len(follow_up_questions)
         qa_pairs = [f"Q: {q}\nA: {a}" for q, a in zip(follow_up_questions, answers)]
         combined_query = f"""

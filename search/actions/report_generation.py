@@ -217,7 +217,7 @@ async def generate_report(
             {"role": "system", "content": f"{agent_role_prompt}"},
             {"role": "user", "content": content},
         ]
-        print("生成报告的message：",message)
+        # print("生成报告的message：",message)
         report = await create_chat_completion(
             model=cfg.smart_model,
             messages=[

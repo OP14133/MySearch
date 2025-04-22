@@ -5,7 +5,7 @@ from MySearch.search.utils.enum import ReportSource, ReportType, Tone
 from typing import List, Dict, Any
 
 
-def generate_search_queries_prompt(
+def generate_deep_search_queries_prompt(
     question: str,
     parent_query: str,
     report_type: str,
@@ -38,16 +38,65 @@ def generate_search_queries_prompt(
 
     dynamic_example = ", ".join([f'"query {i+1}"' for i in range(max_iterations)])
 
-    return f"""请根据给定的查询query和上下文信息进行查询重写，围绕查询意图展开深入分析，写出 {max_iterations} 个具体可检索的搜索查询，以检索与以下主题相关的舆情信息:"{task}"
+    return f"""请根据给定的查询研究任务和上下文信息进行查询重写，围绕研究任务深入分析，写出 {max_iterations} 个用于搜索引擎检索的查询，用于后续搜索引擎检索舆情事件。
 {context_prompt}
 要求：
 - 每个搜索查询应具有明确的问题导向或检索意图；
 - 查询需尽量具体，避免泛泛而谈；
 - 尽可能包含关键元素：时间、地点、人物、事件细节等；
-- 使用自然语言描述，不要只是关键词堆砌。
 假设当前日期为 {datetime.now(timezone.utc).strftime('%B %d, %Y')} （如有需要可根据时间加入时效性信息。）。
 您必须以以下格式回复一个字符串列表: [{dynamic_example}].
 只返回该字符串列表即可，不要附加解释说明。
+"""
+def generate_search_queries_prompt(
+        question: str,
+        parent_query: str,
+        report_type: str,
+        max_iterations: int = 5,
+        context: List[Dict[str, Any]] = [],
+):
+    """生成针对给定问题的搜索查询提示
+    Args:
+        question (str): 需要生成搜索查询提示的问题
+        parent_query (str): 主问题（仅对详细报告相关）
+        report_type (str): 报告类型
+        max_iterations (int): 最大生成搜索查询的次数
+        context (str): 为了更好地理解任务的上下文信息
+
+    Returns: str: 针对给定问题的搜索查询prompt
+    """
+
+    if (
+            report_type == ReportType.DetailedReport.value
+            or report_type == ReportType.SubtopicReport.value
+    ):
+        task = f"{parent_query} - {question}"
+    else:
+        task = question
+
+    context_prompt = f"""
+你是一位经验丰富的研究助手，负责生成针对复杂事件的搜索查询，以全面了解以下任务相关的信息 "{task}".
+Context: {context}
+""" if context else ""
+
+    dynamic_example = ", ".join([f'"query {i + 1}"' for i in range(max_iterations)])
+
+    return f"""写出 {max_iterations} 个谷歌搜索查询，以检索与以下主题相关的舆情信息:"{task}"
+假设当前日期为 {datetime.now(timezone.utc).strftime('%B %d, %Y')} （如有需要）。
+
+{context_prompt}
+基于任务和上下文，生成一组具体、可操作的搜索查询，以捕捉以下维度的信息：
+1. 事件详情：背景、起因、关键时间节点、涉及的主要人物或组织。
+2. 最新动态：最近发生的更新或重要声明，包括相关方的新举措或影响。
+3. 社会反应与公众情绪：民众的讨论、社交媒体趋势、情感倾向分析。
+4. 后续影响：事件对社会、经济、政治等方面的潜在或已知影响。
+5. 时间线发展：从事件起始到当前的完整发展脉络。
+任务：请根据预搜索到的context信息和具体任务生成多个搜索查询，并确保搜索结果能从上述维度全面覆盖相关信息。
+您必须以以下格式回复一个字符串列表: [{dynamic_example}].
+响应内容应仅包含列表。
+示例任务：搜索俄乌冲突
+通过浏览器搜索获得了多个事件摘要信息，摘要信息包含了事件背景、最新动态、社会反应和后续影响生成搜索关键词。
+响应内容:["俄乌冲突起因分析","俄乌冲突背景与关键节点","俄乌战争最新战况 2024年12月","俄乌冲突主要事件节点总结","社交媒体对俄乌战争的讨论趋势","俄乌战争对地缘政治格局的长期影响"]
 """
 
 

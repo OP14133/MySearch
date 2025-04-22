@@ -2,6 +2,7 @@ import asyncio
 import logging
 import random
 import json
+import traceback
 import uuid
 from typing import Dict, Optional
 
@@ -43,8 +44,8 @@ class ResearchConductor:
             output=self.researcher.task_id
         )
 
-        if self.researcher.verbose:
-            await stream_output("logs", "agent_generated", self.researcher.agent, self.researcher.websocket)
+        # if self.researcher.verbose:
+        #     await stream_output("logs", "agent_generated", self.researcher.agent, self.researcher.websocket)
 
         # 如果指定了，研究者将使用给定的 urls 作为研究的上下文。
         if self.researcher.source_urls:
@@ -195,17 +196,19 @@ class ResearchConductor:
             await stream_output(
                 "logs",
                 "subqueries",
-                f"我将基于以下子查询进行研究: {sub_queries}...",
+                f"对于当前问题我将基于以下子查询进行研究:\n- " + "\n- ".join(sub_queries),
                 self.researcher.websocket,
                 True,
                 sub_queries,
             )
         await stream_output(
             "sub_queries",
-            "sub_queries",
-            sub_queries,
+            "当前问题的子问题",
+            f"当前问题是{query},子问题是:{sub_queries}",
             self.researcher.websocket,
             True,
+            {"current_query":query,
+                    "sub_queries": sub_queries}
         )
         try:
             context = await asyncio.gather(
@@ -283,12 +286,17 @@ class ResearchConductor:
             await stream_output(
                 "logs",
                 "running_subquery_research",
-                f"\n正在为子问题'{sub_query}'进行研究...",
+                f"\n正在为子问题'{sub_query}'进行检索...",
                 self.researcher.websocket,
             )
 
-        if not scraped_data:
-            scraped_data = await self.__scrape_data_by_query(sub_query)
+        # if not scraped_data:
+        #     scraped_data = await self.__scrape_data_by_query(sub_query)
+        try:
+            if not scraped_data:
+                scraped_data = await self.__scrape_data_by_query(sub_query)
+        except Exception as e:
+            logging.error(f"❌ 抓取数据时出错（sub_query: {sub_query}）: {str(e)}\n{traceback.format_exc()}")
         #lgq 这里是通过相似度匹配获取，其实可以直接从vector_store获取，否则进行了两次embedding
         #并且现在设置的max_results=10，可以减少一点
         #而且获取到数据是否可以直接调用模型生成一篇报告
@@ -297,7 +305,7 @@ class ResearchConductor:
         try:
             # 调用获取相似内容的函数
             content = await self.researcher.context_manager.get_similar_content_by_query(sub_query, scraped_data)
-            print("相似度匹配结果content", content)
+            # print("相似度匹配结果content", content)
 
         except Exception as e:
             # 捕获所有异常并记录错误信息
@@ -330,7 +338,7 @@ class ResearchConductor:
                 new_urls.append(url)
                 if self.researcher.verbose:
                     await stream_output(
-                        "logs",
+                        "new_url",
                         "added_source_url",
                         f"新增url: {url}\n",
                         self.researcher.websocket,
@@ -373,29 +381,29 @@ class ResearchConductor:
         new_search_urls = await self.__get_new_urls(new_search_urls)
         random.shuffle(new_search_urls)
 
-        # # 如果详细模式开启，记录研究过程
-        if self.researcher.verbose:
-            await stream_output(
-                "logs",
-                "researching",
-                f"在多个来源中研究相关信息...\n",
-                self.researcher.websocket,
-            )
+        # # # 如果详细模式开启，记录研究过程
+        # if self.researcher.verbose:
+        #     await stream_output(
+        #         "logs",
+        #         "researching",
+        #         f"在多个来源中研究相关信息...\n",
+        #         self.researcher.websocket,
+        #     )
         # 抓取新 URLS
         scraped_content = await self.researcher.scraper_manager.browse_urls(new_search_urls)
         if not scraped_content:
-            scraped_content = [{"url": url, "raw_content": "", "title": "", "body": url_body_dict.get(url, "")}
+            scraped_content = [{"url": url, "raw_content": "raw_content", "title": "", "body": url_body_dict.get(url, "body")}
                                for url in new_search_urls]
-
+        # print("scraped_content",scraped_content)
         for each in scraped_content:
             url = each.get("url")
             raw_content = each.get("raw_content")
-            title = each.get("title")or""
-            body = url_body_dict.get(url) or ""
+            title = each.get("title") or "title"
+            body = url_body_dict.get(url) or "body"
             if not raw_content:
                 print("没有raw_content")
                 each["raw_content"] = f"{title}\n{body}"
-                print("成功处理raw_content"+each["raw_content"])
+                print("成功处理raw_content")
         #     webPage = WebPageDetailsSchema(
         #         task_id=self.researcher.task_id,
         #         url=url,
@@ -406,11 +414,14 @@ class ResearchConductor:
         #     )
         #     self.researcher.dialogue_service.create_web_page_details(webPage)
         # print("scraped_content____:", scraped_content)
+        # if scraped_content
         try:
             if self.researcher.vector_store:
-                self.researcher.vector_store.vector_store.load(scraped_content)
+                print("执行到了vector_store.load")
+                self.researcher.vector_store.load(scraped_content)
         except Exception as e:
-            logging.error(f"An unexpected error occurred: {str(e)}")
+            logging.error(f"load vector_storeAn unexpected error occurred: {str(e)}")
+            # logging.error(f"此时的scraped_content: {str(scraped_content)}")
         return scraped_content
 
     async def plan_research(self, query):
@@ -437,6 +448,7 @@ class ResearchConductor:
             cfg=self.researcher.cfg,
             parent_query=self.researcher.parent_query,
             report_type=self.researcher.report_type,
+            is_deep = self.researcher.is_deep
         )
 
 

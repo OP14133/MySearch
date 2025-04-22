@@ -17,3 +17,4 @@ class DialogueSchema(BaseModel):
     conversations: List[dict] = []
     timeline: List[dict] = []
     summery: str
+    wordcloud: List[dict]

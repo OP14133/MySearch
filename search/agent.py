@@ -32,6 +32,7 @@ class GPTResearcher:
         report_format: str = "markdown",
         report_source: str = ReportSource.Web.value,
         tone: Tone = Tone.Objective,
+        is_deep: int = 0,
         source_urls=None,
         documents=None,
         vector_store=None,
@@ -81,7 +82,7 @@ class GPTResearcher:
         self.content = {}
         self.history = {}
         self.task_id = task_id
-
+        self.is_deep = is_deep
         # Initialize components
         self.research_conductor: ResearchConductor = ResearchConductor(self)
         self.report_generator: ReportGenerator = ReportGenerator(self)
@@ -95,8 +96,8 @@ class GPTResearcher:
     async def conduct_research(self, on_progress=None):
         if self.report_type == ReportType.DeepResearch.value and self.deep_researcher:
             #lgq测试
-            self.deep_researcher.depth = 1
-            self.deep_researcher.breadth = 1
+            # self.deep_researcher.depth = 1
+            # self.deep_researcher.breadth = 1
             return await self._handle_deep_research(on_progress)
         if not (self.agent and self.role):
             self.agent = "舆情信息检索代理"

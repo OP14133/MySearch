@@ -1,6 +1,6 @@
 import json_repair
 from ..utils.llm import create_chat_completion
-from ..prompts import generate_search_queries_prompt
+from ..prompts import generate_search_queries_prompt, generate_deep_search_queries_prompt
 from typing import Any, List, Dict
 from ..config import Config
 import logging
@@ -27,6 +27,7 @@ async def generate_sub_queries(
     report_type: str,
     context: List[Dict[str, Any]],
     cfg: Config,
+    is_deep:int
 ) -> List[str]:
     """
     使用指定的模型生成子查询
@@ -42,14 +43,26 @@ async def generate_sub_queries(
     Returns:
         子查询列表
     """
-    gen_queries_prompt = generate_search_queries_prompt(
-        query,
-        parent_query,
-        report_type,
-        max_iterations=cfg.max_iterations or 1,
-        context=context
-    )
-
+    gen_queries_prompt = ""
+    if is_deep == 1:
+        gen_queries_prompt = generate_deep_search_queries_prompt(
+            query,
+            parent_query,
+            report_type,
+            max_iterations=1,
+            context=context
+        )
+    else:
+        gen_queries_prompt = generate_search_queries_prompt(
+            query,
+            parent_query,
+            report_type,
+            max_iterations=5,
+            context=context
+        )
+    # print("======================================================")
+    # print(gen_queries_prompt)
+    # print("======================================================")
     try:
         response = await create_chat_completion(
             model=cfg.strategic_model,
@@ -77,6 +90,7 @@ async def plan_research_outline(
     cfg: Config,
     parent_query: str,
     report_type: str,
+    is_deep:int
 ) -> List[str]:
     """
     通过生成子查询规划研究大纲.
@@ -99,6 +113,7 @@ async def plan_research_outline(
         report_type,
         search_results,
         cfg,
+        is_deep
     )
 
     return sub_queries

@@ -22,8 +22,9 @@ class ContextManager:
             documents=pages, embeddings=self.researcher.memory.get_embeddings()
         )
         print("执行到了相似度匹配fetching_query_content2")
+        #lgq相似度匹配结果设置
         return await context_compressor.async_get_context(
-            query=query, max_results=10
+            query=query, max_results=7
         )
         
     async def get_similar_content_by_query_with_vectorstore(self, query, filter): 

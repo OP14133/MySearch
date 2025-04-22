@@ -39,6 +39,7 @@ class ChatAgentWithMemory:
         ).llm
 
         # 如果向量数据库没有初始化，处理文档并添加到向量数据库
+
         if not self.vector_store:
             documents = self._process_document(self.report)
             self.chat_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
@@ -93,7 +94,7 @@ class ChatAgentWithMemory:
     #         results = retriever.invoke(query)
     #
     #         # 调试输出
-    #         print("Retrieved Results:")
+    #         print("Vector_store Retrieved Results:")
     #         for idx, result in enumerate(results):
     #             print(f"Result {idx + 1}: {result}")
     #         # retriever = vector_store.as_retriever(k = 4)
@@ -114,21 +115,30 @@ class ChatAgentWithMemory:
     async def chat(self, message, websocket):
         """Chat with React Agent"""
         # documents = InMemoryVectorStore().as_retriever(k=4).invoke()
-        documents = str(self.vector_store.as_retriever(k=4).invoke(str(message)))
+        # print("vector_store",self.vector_store)
+        # document_sample = self.vector_store.get(limit=1, offset=0)
+        # print(f"当前数据库中的文档示例: {document_sample}")
+        documents = str(self.vector_store.as_retriever(k=5).invoke(str(message)))
+        #
+        # print("\n=== Retrieved Documents from Vector Store ===")
+        # for i, doc in enumerate(documents, 1):
+        #     print(f"\n--- Document {i} ---\n{doc.page_content}")
+        # print("=============================================\n")
         message1 = f"""
-         你是 舆情信息Researcher，
+         你是舆情信息Researcher，
          用户提出问题，你针对用户的问题进行了研究拆分，通过浏览器检索到了相关舆情信息，并利用这些信息给出了总结。
          已有信息：
          {documents}\n
          历史对话: {message}
         """
         inputs = {"messages": [("user", message1)]}
-        response = await self.graph.ainvoke(inputs, config=self.chat_config)
-        print("response::",response["messages"])
+        chat_config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        response = await self.graph.ainvoke(inputs, config=chat_config)
+        # print("response::",response["messages"])
         ai_message = response["messages"][-1].content
         if websocket is not None:
-            await websocket.send_json({"type": "report", "output": ai_message})
-            await websocket.send_json({"type": "path", "output": "输出完毕"})
+            await websocket.send_json({"type": "chat", "output": ai_message})
+            await websocket.send_json({"type": "chat_finish", "output": "输出完毕"})
 
     def get_context(self):
         """返回当前chat的上下文return the current context of the chat"""

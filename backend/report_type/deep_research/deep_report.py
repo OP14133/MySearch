@@ -31,7 +31,8 @@ class DeepReport:
         context: str,
         sub_queries: list,
         headers=None,
-        task_id=str
+        task_id=str,
+        vector_store=None
     ):
         self.query = query
         self.report_type = report_type
@@ -44,19 +45,21 @@ class DeepReport:
         self.context = context
         self.sub_queries = sub_queries
         self.task_id = task_id
+        self.vector_store = vector_store
 
         # self.db = Database()
 
     async def run(self):
-        cfg = Config()
-        memory = Memory(cfg.embedding_provider, cfg.embedding_model, **cfg.embedding_kwargs)
-        embeddings = memory.get_embeddings()
-        vector_store = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
+        # cfg = Config()
+        # memory = Memory(cfg.embedding_provider, cfg.embedding_model, **cfg.embedding_kwargs)
+        # embeddings = memory.get_embeddings()
+        # vector_store = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
         # Initialize researcher with deep research type
         researcher = GPTResearcher(
             query=self.query,
             report_type="deep",  # This will trigger deep research
-            vector_store=vector_store,
+            is_deep=1,
+            vector_store=self.vector_store,
             websocket=self.websocket,
             headers=self.headers,
 

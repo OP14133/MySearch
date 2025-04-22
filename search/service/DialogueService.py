@@ -1,3 +1,5 @@
+from typing import List, Tuple
+
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import text
 from MySearch.database.database import DatabaseManager, Dialogue,WebPageDetails
@@ -19,6 +21,7 @@ class DialogueService:
                 urls=dialogue.urls,
                 timeline=dialogue.timeline,
                 summery=dialogue.summery,
+                wordcloud=dialogue.wordcloud,
                 conversations=dialogue.conversations
             )
             sess.add(db_dialogue)
@@ -60,8 +63,35 @@ class DialogueService:
         self.session.commit()
         return {"detail": "Dialogue deleted successfully"}
 
-    def get_all_dialogues(self):
-        return self.session.query(Dialogue).all()
+    def get_all_dialogues(self, page: int = 1, page_size: int = 10) -> Tuple[List[DialogueSchema], int]:
+        """获取分页的 dialogues"""
+        session = self.db.get_session()
+        with session as sess:
+            # 计算 offset
+            offset = (page - 1) * page_size
+
+            # 查询分页数据
+            dialogues = sess.query(Dialogue).offset(offset).limit(page_size).all()
+
+            # 查询总记录数
+            total = sess.query(Dialogue).count()
+
+            # 将 SQLAlchemy 对象转换为 Pydantic 模型
+            dialogue_schemas = [
+                DialogueSchema(
+                    task_id=dialogue.task_id,
+                    original_question=dialogue.original_question,
+                    subqueries=dialogue.subqueries,
+                    urls=dialogue.urls,
+                    conversations=dialogue.conversations,
+                    timeline=dialogue.timeline,
+                    summery=dialogue.summery,
+                    wordcloud=dialogue.wordcloud
+                )
+                for dialogue in dialogues
+            ]
+
+            return dialogue_schemas, total
 
     # WebPageDetails 模型的增删改查操作
 
@@ -116,7 +146,10 @@ class DialogueService:
 
 if __name__ == "__main__":
     service = DialogueService()
-    service.db.create_tables()
+    dialogues = service.get_all_dialogues()
+    for dialogue in dialogues:
+        print(dialogue)
+        print("\n")
     # dialogue_instance = DialogueSchema(
     #     task_id="123e4567-e89b-12d3-a456-426614174000",
     #     original_question="lgq",

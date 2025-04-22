@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 import time
@@ -7,6 +8,7 @@ import shutil
 import uuid
 from typing import Dict, List, Any
 from fastapi.responses import JSONResponse
+from fastapi import WebSocketDisconnect
 from ...search.document.document import DocumentLoader
 # Add this import
 from ..utils import write_md_to_pdf, write_md_to_word, write_text_to_md
@@ -46,12 +48,14 @@ async def handle_start_command(websocket, data, manager):
     report = await manager.start_streaming(
         task, report_type, report_source, source_urls, tone, websocket, task_id, headers
     )
-    report = str(report)
+    # report = str(report)
     #生成报告文件
-    file_paths = await generate_report_files(report, sanitized_filename)
+    # file_paths = await generate_report_files(report, sanitized_filename)
     #发送websocket到前端，生成报告的文件路径
-    await send_file_paths(websocket, file_paths)
-
+    try:
+        await websocket.send_json({"type": "path", "output": "结束"})
+    except Exception as e:
+        logging.error(f"通过 WebSocket 发送 JSON 时出错: {e}\n此时的数据是{data}")
 
 async def handle_human_feedback(data: str):
     feedback_data = json.loads(data[14:])  # Remove "human_feedback" prefix
@@ -60,8 +64,8 @@ async def handle_human_feedback(data: str):
 
 async def handle_chat(websocket, data, manager):
     # json_data = json.loads(data)
-    print(f"Received chat message: {data.get('context')}")#message是用户第二轮提问
-    await manager.chat(data.get("context"), websocket)
+    print(f"Received chat message: {data.get('task')}")#message是用户第二轮提问
+    await manager.chat(data.get("task"), websocket)
 
 async def generate_report_files(report: str, filename: str) -> Dict[str, str]:
     pdf_path = await write_md_to_pdf(report, filename)
@@ -70,7 +74,7 @@ async def generate_report_files(report: str, filename: str) -> Dict[str, str]:
     return {"pdf": pdf_path, "docx": docx_path, "md": md_path}
 
 
-async def send_file_paths(websocket, file_paths: Dict[str, str]):
+async def send_file_paths(websocket,file_paths):
     await websocket.send_json({"type": "path", "output": file_paths})
 
 
@@ -135,17 +139,48 @@ async def handle_file_deletion(filename: str, DOC_PATH: str) -> JSONResponse:
 
 
 async def handle_websocket_communication(websocket, manager):
-    while True:
-        data = await websocket.receive_text()#从 WebSocket 连接中接收文本消息，并将其存储在 data 变量中
-        json_data = json.loads(data)
-        data_type = json_data.get("type")
-        if data_type == "start":
-            # task_id = str(uuid.uuid4())
-            await handle_start_command(websocket, json_data, manager)#从接收到的消息中提取必要的数据，并启动一个报告生成流程。最后，它将生成的文件路径发送回客户端。
-        elif data_type == "chat":
-            await handle_chat(websocket, json_data, manager)
-        else:
-            print("Error: Unknown command or not enough parameters provided.")
+    # while True:
+    #     data = await websocket.receive_text()#从 WebSocket 连接中接收文本消息，并将其存储在 data 变量中
+    #     json_data = json.loads(data)
+    #     data_type = json_data.get("type")
+    #     if data_type == "start":
+    #         # task_id = str(uuid.uuid4())
+    #         await handle_start_command(websocket, json_data, manager)#从接收到的消息中提取必要的数据，并启动一个报告生成流程。最后，它将生成的文件路径发送回客户端。
+    #     elif data_type == "chat":
+    #         await handle_chat(websocket, json_data, manager)
+    #     else:
+    #         print("Error: Unknown command or not enough parameters provided.")
+    try:
+        while True:
+            try:
+                data = await websocket.receive_text()
+            except WebSocketDisconnect:
+                print("WebSocketDisconnect: 客户端连接已断开")
+                break
+            except Exception as e:
+                print(f"WebSocket error while receiving: {e}")
+                break
+
+            try:
+                json_data = json.loads(data)
+            except json.JSONDecodeError as e:
+                print(f"JSON 解析错误: {e}, 原始数据: {data}")
+                continue
+
+            data_type = json_data.get("type")
+            if data_type == "start":
+                await handle_start_command(websocket, json_data, manager)
+            elif data_type == "chat":
+                await handle_chat(websocket, json_data, manager)
+            elif data_type == "ping":
+                try:
+                    await websocket.send_json({"type": "pong"})
+                except Exception as e:
+                    logging.error(f"通过 WebSocket 发送 JSON 时出错: {e}")
+            else:
+                print("Error: Unknown command or not enough parameters provided.")
+    except Exception as e:
+        print(f"WebSocket 主循环异常终止: {e}")
 
 
 def extract_command_data(json_data: Dict) -> tuple:

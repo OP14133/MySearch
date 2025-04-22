@@ -26,7 +26,7 @@ async def stream_output(
                 'cp1252', errors='replace').decode('cp1252'))
 
     if websocket:
-        await websocket.send_json(
+        await safe_send_json(websocket,
             {"type": type, "content": content,
                 "output": output, "metadata": metadata}
         )
@@ -46,7 +46,7 @@ async def safe_send_json(websocket: Any, data: Dict[str, Any]) -> None:
     try:
         await websocket.send_json(data)
     except Exception as e:
-        logger.error(f"通过 WebSocket 发送 JSON 时出错: {e}")
+        logger.error(f"通过 WebSocket 发送 JSON 时出错: {e}\n此时的数据是{data}")
 
 
 def format_token_count(count: int) -> str:
